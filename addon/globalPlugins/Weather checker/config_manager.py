@@ -59,7 +59,6 @@ confspec_dict = {
         # Astronomy Settings
         "astro_sunrise": "boolean(default=true)",
         "astro_sunset": "boolean(default=true)",
-        "astro_moonphase": "boolean(default=true)",
         
         # Weather Alerts Settings (Warning types to alert)
         "alert_severe": "boolean(default=true)",

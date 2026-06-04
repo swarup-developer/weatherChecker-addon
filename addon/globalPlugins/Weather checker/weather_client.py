@@ -786,7 +786,7 @@ def _get_installed_version():
     except Exception:
         pass
     # Hard-coded fallback that always matches current buildVars
-    return "2.0.8"
+    return "2.1.1"
 
 
 def checkForUpdates():

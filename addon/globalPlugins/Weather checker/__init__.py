@@ -740,9 +740,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 t_str = weather_client.formatTimestamp(astro["sunset"])
                 parts.append(_("Sunset: {time}").format(time=t_str))
 
-            if config_manager.getConfigVal("astro_moonphase") and astro.get("moon_phase") is not None:
-                phase_name = weather_client.getMoonPhaseName(astro["moon_phase"])
-                parts.append(_("Moon phase: {phase}").format(phase=phase_name))
                 
             if parts:
                 report_str = ", ".join(parts)

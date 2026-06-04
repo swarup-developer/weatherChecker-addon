@@ -578,7 +578,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
             ("info_uvIndex", _("UV index")),
             ("info_clouds", _("Cloud coverage")),
             ("info_dewPoint", _("Dew point")),
-            ("info_airQuality", _("Air quality index (requires OpenWeather API)"))
+            ("info_airQuality", _("Air quality when available"))
         ]
         for key, label in info_keys:
             cb = wx.CheckBox(self, label=label)
@@ -624,8 +624,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         self.astroCbs = {}
         astro_keys = [
             ("astro_sunrise", _("Sunrise time")),
-            ("astro_sunset", _("Sunset time")),
-            ("astro_moonphase", _("Moon phase"))
+            ("astro_sunset", _("Sunset time"))
         ]
         for key, label in astro_keys:
             cb = wx.CheckBox(self, label=label)
