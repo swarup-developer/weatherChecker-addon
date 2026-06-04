@@ -768,7 +768,10 @@ def downloadAndInstallUpdate(latest_version, download_url):
         wx.CallAfter(speech.speakMessage, _("Downloading Weather Checker update..."))
         
         try:
-            resp = requests.get(download_url, stream=True, timeout=60)
+            headers = {
+                "User-Agent": "WeatherCheckerNVDAUpdateChecker/1.0 (Contact: swarup.baral@example.com)"
+            }
+            resp = requests.get(download_url, headers=headers, stream=True, timeout=60)
             resp.raise_for_status()
             
             temp_dir = tempfile.gettempdir()
@@ -778,31 +781,52 @@ def downloadAndInstallUpdate(latest_version, download_url):
                 for chunk in resp.iter_content(chunk_size=8192):
                     f.write(chunk)
                     
-            wx.CallAfter(speech.speakMessage, _("Installing update..."))
-            
-            bundle = addonHandler.AddonBundle(temp_path)
-            addon = addonHandler.installAddonBundle(bundle)
-            if addon is None:
-                raise Exception("addonHandler failed to install the addon bundle.")
-                
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
-                
-            def ask_restart():
-                msg = _("Weather Checker has been updated to version {version}. You must restart NVDA for the changes to take effect. Would you like to restart now?").format(version=latest_version)
-                resp = gui.messageBox(
-                    message=msg,
-                    caption=_("Restart NVDA"),
-                    style=wx.YES_NO | wx.ICON_QUESTION
-                )
-                if resp == wx.YES:
-                    core.restart()
-            wx.CallAfter(ask_restart)
+            def install_and_restart():
+                try:
+                    speech.speakMessage(_("Installing update..."))
+                    
+                    bundle = addonHandler.AddonBundle(temp_path)
+                    bundleName = bundle.manifest['name']
+                    
+                    # Request removal of the previous addon version to avoid OsError/replace failures
+                    curAddons = list(addonHandler.getAvailableAddons())
+                    prevAddon = next((addon for addon in curAddons if bundleName == addon.manifest['name']), None)
+                    if prevAddon:
+                        log.info(f"Marking existing addon {bundleName} version {prevAddon.manifest['version']} for removal before update")
+                        prevAddon.requestRemove()
+                        
+                    addon = addonHandler.installAddonBundle(bundle)
+                    if addon is None:
+                        raise Exception("addonHandler failed to install the addon bundle.")
+                        
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+                        
+                    msg = _("Weather Checker has been updated to version {version}. You must restart NVDA for the changes to take effect. Would you like to restart now?").format(version=latest_version)
+                    resp_val = gui.messageBox(
+                        message=msg,
+                        caption=_("Restart NVDA"),
+                        style=wx.YES_NO | wx.ICON_QUESTION
+                    )
+                    if resp_val == wx.YES:
+                        core.restart()
+                except Exception as e:
+                    log.error("Failed to install update on main thread", exc_info=True)
+                    error_msg = _("Update failed: ") + str(e)
+                    speech.speakMessage(error_msg)
+                    gui.messageBox(error_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR)
+                    try:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                    except Exception:
+                        pass
+
+            wx.CallAfter(install_and_restart)
             
         except Exception as e:
-            log.error("Failed to download and install update", exc_info=True)
+            log.error("Failed to download update in background thread", exc_info=True)
             error_msg = _("Update failed: ") + str(e)
             wx.CallAfter(speech.speakMessage, error_msg)
             wx.CallAfter(gui.messageBox, error_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR)

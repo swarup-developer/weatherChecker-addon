@@ -1,4 +1,3 @@
-- Replaced the simple message box dialog for update prompts with a custom UpdatePromptDialog.
-- The "What's New" contents are now displayed inside a read-only multiline edit box, allowing NVDA screen-reader users to navigate and read the release notes easily.
-- Focus is set to the "Yes" button by default in the update prompt.
-- Bumped add-on version to 2.0.01.
+- Fixed programmatic background update downloading and installation to prevent locks or failures.
+- Ensured thread-safe GUI updates and installation of the add-on update.
+- Marked previous version for removal automatically to prevent installation conflicts.
