@@ -148,10 +148,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         try:
             update_available, latest_version, download_url, body = weather_client.checkForUpdates()
             if update_available:
+                # force=False: anti-spam rules apply for automatic startup checks
                 wx.CallAfter(weather_client.promptUpdate, latest_version, download_url, body)
+        except weather_client.NetworkError:
+            # Network unavailable at startup — not worth alerting the user
+            log.info("Weather Checker startup update check: network unavailable.")
         except Exception:
-            # Silent fail — update check is non-critical; errors are logged by checkForUpdates
-            pass
+            log.warning("Weather Checker startup update check failed.", exc_info=True)
 
     # ----------------------------------------------------
     # Background Alert Polling Loop

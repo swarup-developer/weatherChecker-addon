@@ -786,7 +786,7 @@ def _get_installed_version():
     except Exception:
         pass
     # Hard-coded fallback that always matches current buildVars
-    return "2.1.1"
+    return "3.0.1"
 
 
 def checkForUpdates():
@@ -893,35 +893,43 @@ def _read_update_state(key, default=""):
         return default
 
 
-def promptUpdate(latest_version, download_url, release_notes, parent=None):
+def promptUpdate(latest_version, download_url, release_notes, parent=None, force=False):
     """
-    Gate-checks and shows the update dialog exactly once per session / version.
+    Gate-checks and shows the update dialog.
 
-    Anti-spam rules enforced here:
-      1. If the user successfully installed this version already → silent skip.
-      2. If the user dismissed this version in the current NVDA session → silent skip.
-      3. Otherwise show the dialog once; record the outcome.
+    Anti-spam rules (all bypassed when force=True, e.g. manual "Check Now" button):
+      1. If user already installed this version → silent skip.
+      2. If user dismissed this version this session → silent skip.
+
+    Args:
+        force: When True (manual check from settings), bypass session-dismissal so
+               the dialog always appears even if the user said No earlier.
     """
     import wx
+    import gui as _gui
 
     lv = latest_version.strip().lstrip("v")
 
-    # Rule 1 — user already installed this version (persisted across restarts)
-    last_installed = _read_update_state("lastUpdatedVersion")
-    if last_installed and _versions_equal(last_installed, lv):
-        log.info(
-            f"Update prompt suppressed: v{lv} was already installed by the user."
-        )
-        return
+    if not force:
+        # Rule 1 — user already installed this version (persisted across restarts)
+        last_installed = _read_update_state("lastUpdatedVersion")
+        if last_installed and _versions_equal(last_installed, lv):
+            log.info(f"Update prompt suppressed: v{lv} already installed.")
+            return
 
-    # Rule 2 — user said No this session (in-memory, resets on NVDA restart)
-    if lv in _update_session_dismissed:
-        log.info(
-            f"Update prompt suppressed: user dismissed v{lv} this session."
-        )
-        return
+        # Rule 2 — user said No this session (in-memory, resets on NVDA restart)
+        if lv in _update_session_dismissed:
+            log.info(f"Update prompt suppressed: user dismissed v{lv} this session.")
+            return
 
-    # Show the dialog
+    # Use mainFrame as fallback parent so the dialog always has a valid owner
+    if parent is None:
+        try:
+            parent = _gui.mainFrame
+        except Exception:
+            parent = None
+
+    # Show the update dialog
     try:
         dlg = UpdatePromptDialog(parent, lv, release_notes)
         result = dlg.ShowModal()
@@ -931,16 +939,17 @@ def promptUpdate(latest_version, download_url, release_notes, parent=None):
         return
 
     if result == wx.ID_YES:
-        # User accepted — start download/install and record intent
         _save_update_state("lastOfferedVersion", lv)
+        # Remove from dismissed set so re-prompt works after install
+        _update_session_dismissed.discard(lv)
         downloadAndInstallUpdate(lv, download_url)
     else:
-        # User declined — remember for this session only (not persisted)
+        # Declined — remember for this session only
         _update_session_dismissed.add(lv)
         log.info(
             f"User declined update to v{lv}. "
             "Will not prompt again this session. "
-            "Will re-check after next NVDA restart."
+            "Will re-offer after NVDA restart."
         )
 
 
@@ -1006,9 +1015,13 @@ def downloadAndInstallUpdate(latest_version, download_url):
                             break
 
                     installed = _ah.installAddonBundle(bundle)
+                    # installAddonBundle schedules install for next NVDA restart.
+                    # It returns the addon reference on success; None means the
+                    # bundle was rejected (e.g. incompatible NVDA version).
                     if installed is None:
                         raise RuntimeError(
-                            "addonHandler.installAddonBundle returned None."
+                            "The add-on bundle was rejected by NVDA "
+                            "(possibly incompatible with your NVDA version)."
                         )
 
                     # Persist the installed version — suppresses future prompts
@@ -1029,9 +1042,9 @@ def downloadAndInstallUpdate(latest_version, download_url):
                         "Would you like to restart now?"
                     ).format(ver=latest_version)
                     if gui.messageBox(
-                        restart_msg,
-                        _("Restart NVDA"),
-                        wx.YES_NO | wx.ICON_QUESTION
+                        message=restart_msg,
+                        caption=_("Restart NVDA"),
+                        style=wx.YES_NO | wx.ICON_QUESTION
                     ) == wx.YES:
                         core.restart()
 
@@ -1074,16 +1087,17 @@ def downloadAndInstallUpdate(latest_version, download_url):
     t.start()
 
 
-class UpdatePromptDialog(wx.Dialog if wx else object):
+class UpdatePromptDialog(wx.Dialog):
     """
-    Accessible dialog shown once when a newer version is available.
+    Accessible dialog shown when a newer version is available.
     Displays version info and optional release notes.
+    Inherits wx.Dialog directly (wx is always available when NVDA runs).
     """
     def __init__(self, parent, latest_version, release_notes):
         import wx
         super().__init__(
             parent,
-            title=_("Weather Checker Update Available"),
+            title=_("Weather Checker — Update Available"),
             style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER
         )
         self.latest_version = latest_version

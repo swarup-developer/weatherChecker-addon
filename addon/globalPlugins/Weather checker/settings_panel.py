@@ -912,15 +912,17 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
 
     def onUpdateCheckComplete(self, update_available, latest_version, download_url, body):
         self.checkUpdateBtn.Enable()
-        self.checkUpdateBtn.SetLabel(_("Check for &Updates Now"))
+        self.checkUpdateBtn.SetLabel(_(u"Check for \u0026Updates Now"))
 
         if update_available:
-            weather_client.promptUpdate(latest_version, download_url, body, parent=self)
+            # force=True: user explicitly clicked the button — always show the dialog
+            # even if they dismissed this version earlier in the session
+            weather_client.promptUpdate(latest_version, download_url, body, parent=self, force=True)
         else:
             current_version = weather_client._get_installed_version()
-            msg = _("Weather Checker is up to date. Installed version: {version}.").format(version=current_version)
+            msg = _(u"Weather Checker is up to date. Installed version: {version}.").format(version=current_version)
             ui.message(msg)
-            gui.messageBox(msg, _("Weather Checker Update"), wx.OK | wx.ICON_INFORMATION, parent=self)
+            gui.messageBox(msg, _(u"Weather Checker Update"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
     def onUpdateCheckFailed(self, error_msg):
         self.checkUpdateBtn.Enable()
