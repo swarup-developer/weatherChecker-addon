@@ -1,3 +1,5 @@
-- Added a settings panel checkbox option to automatically copy spoken weather details to the clipboard.
-- Restored and verified the automatic location detection checkbox option in the settings panel.
-- Updated shortcuts and help documentation.
+Version 2.0.6:
+- Fixed: Update notification no longer repeats every startup after pressing No — the skipped version is remembered.
+- Fixed: Auto-detect location now tries three IP geolocation services in sequence, so a rate-limited service no longer causes a "Geocoding service rate limited" error.
+- Fixed: Version comparison now handles leading-zero version numbers (e.g. 2.0.05 vs 2.0.5) correctly, preventing false update alerts.
+- Minor: Cleaner version numbering (no leading zeros).

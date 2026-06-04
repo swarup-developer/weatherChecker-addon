@@ -32,6 +32,7 @@ confspec_dict = {
         # Update Settings
         "auto_update_check": "boolean(default=true)",
         "copy_to_clipboard": "boolean(default=false)",
+        "skippedUpdateVersion": "string(default='')",
         
         # Weather Information options (to speak/announce)
         "info_currentWeather": "boolean(default=true)",

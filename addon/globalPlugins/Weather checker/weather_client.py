@@ -185,12 +185,15 @@ def geocodeLocation(query, provider, openWeatherKey):
 
 def detectLocationIP():
     """
-    Detect location using ipwho.is IP-based geolocation.
+    Detect location using IP-based geolocation.
+    Tries multiple free services in sequence so one rate-limit doesn't break detection.
     Returns {"lat": lat, "lon": lon, "name": name, "country": country}
     """
-    url = "https://ipwho.is/"
+    last_error = None
+
+    # --- Service 1: ipwho.is ---
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get("https://ipwho.is/", timeout=10)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("success"):
@@ -199,22 +202,58 @@ def detectLocationIP():
                 country = data.get("country", "")
                 lat = data.get("latitude")
                 lon = data.get("longitude")
-                
+                if lat is not None and lon is not None:
+                    name_parts = [p for p in [city, region] if p]
+                    name = ", ".join(name_parts) if name_parts else _("Detected Location")
+                    return {"lat": float(lat), "lon": float(lon), "name": name, "country": country}
+        log.warning("ipwho.is returned no usable data, trying fallback.")
+    except Exception as e:
+        last_error = e
+        log.warning(f"ipwho.is failed: {e}, trying fallback.")
+
+    # --- Service 2: ip-api.com (free tier, no key needed) ---
+    try:
+        resp = requests.get("http://ip-api.com/json/?fields=status,city,regionName,country,lat,lon", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "success":
+                city = data.get("city", "")
+                region = data.get("regionName", "")
+                country = data.get("country", "")
+                lat = data.get("lat")
+                lon = data.get("lon")
+                if lat is not None and lon is not None:
+                    name_parts = [p for p in [city, region] if p]
+                    name = ", ".join(name_parts) if name_parts else _("Detected Location")
+                    return {"lat": float(lat), "lon": float(lon), "name": name, "country": country}
+        log.warning("ip-api.com returned no usable data, trying fallback.")
+    except Exception as e:
+        last_error = e
+        log.warning(f"ip-api.com failed: {e}, trying fallback.")
+
+    # --- Service 3: ipapi.co ---
+    try:
+        resp = requests.get("https://ipapi.co/json/", timeout=10,
+                            headers={"User-Agent": "WeatherCheckerNVDA/2.0"})
+        if resp.status_code == 200:
+            data = resp.json()
+            lat = data.get("latitude")
+            lon = data.get("longitude")
+            if lat is not None and lon is not None:
+                city = data.get("city", "")
+                region = data.get("region", "")
+                country = data.get("country_name", "")
                 name_parts = [p for p in [city, region] if p]
                 name = ", ".join(name_parts) if name_parts else _("Detected Location")
-                
-                return {
-                    "lat": float(lat),
-                    "lon": float(lon),
-                    "name": name,
-                    "country": country
-                }
-            else:
-                raise GeocodingError(_("IP Geolocation failed: ") + str(data.get("message", "Unknown error")))
-        else:
-            raise NetworkError(f"IP Geolocation HTTP Error {resp.status_code}: {resp.reason}")
-    except requests.RequestException as e:
-        raise NetworkError(_("IP Geolocation network failure: ") + str(e))
+                return {"lat": float(lat), "lon": float(lon), "name": name, "country": country}
+        log.warning("ipapi.co returned no usable data.")
+    except Exception as e:
+        last_error = e
+        log.warning(f"ipapi.co failed: {e}")
+
+    raise GeocodingError(
+        _("Could not auto-detect location. All IP geolocation services are unavailable. Please set your location manually in settings.")
+    )
 
 
 def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
@@ -690,26 +729,47 @@ def formatDay(ts):
 # ----------------------------------------------------
 # GitHub-based Add-on Version Checker
 # ----------------------------------------------------
+def _normalize_version(v):
+    """
+    Normalize a version string for reliable comparison.
+    Converts each dot-separated segment to an integer, eliminating leading zeros.
+    e.g. '2.0.05' -> [2, 0, 5]  and  '2.0.5' -> [2, 0, 5]
+    """
+    parts = []
+    for p in v.strip().lstrip("v").split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            parts.append(0)
+    return parts
+
+
 def checkForUpdates():
     """
     Check for add-on updates on GitHub releases.
     Returns (update_available, latest_version, download_url, release_notes)
     """
+    # Try to get the real installed version; fall back to buildVars as the source of truth
+    current_version = "2.0.6"
     try:
         addon = addonHandler.getCodeAddon()
-        current_version = addon.manifest.version
+        v = addon.manifest.get("version") or addon.manifest.version
+        if v:
+            current_version = str(v).strip()
     except Exception:
-        current_version = "1.0.4"
+        pass
+
     url = "https://api.github.com/repos/swarup-developer/weatherChecker-addon/releases/latest"
     headers = {
-        "User-Agent": "WeatherCheckerNVDAUpdateChecker/1.0 (Contact: swarup.baral@example.com)"
+        "User-Agent": "WeatherCheckerNVDAUpdateChecker/2.0 (Contact: swarup.baral@example.com)"
     }
     
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            tag = data.get("tag_name", "1.0.0").strip().lstrip("v")
+            tag = data.get("tag_name", current_version).strip()
+            tag_clean = tag.lstrip("v")
             
             assets = data.get("assets", [])
             download_url = ""
@@ -723,10 +783,10 @@ def checkForUpdates():
                 
             body = data.get("body", "")
             
-            # Semantic Version check
+            # Reliable semantic version comparison (handles leading zeros like 2.0.05)
             try:
-                curr_parts = [int(p) for p in current_version.split(".")]
-                tag_parts = [int(p) for p in tag.split(".")]
+                curr_parts = _normalize_version(current_version)
+                tag_parts = _normalize_version(tag_clean)
                 
                 # Zero pad to same length if needed
                 max_len = max(len(curr_parts), len(tag_parts))
@@ -735,9 +795,9 @@ def checkForUpdates():
                 
                 update_available = tag_parts > curr_parts
             except Exception:
-                update_available = tag != current_version
+                update_available = tag_clean != current_version
                 
-            return update_available, tag, download_url, body
+            return update_available, tag_clean, download_url, body
         elif resp.status_code == 404:
             # No releases published yet
             return False, current_version, "", ""
@@ -878,13 +938,39 @@ class UpdatePromptDialog(wx.Dialog if wx else object):
 def promptUpdate(latest_version, download_url, body, parent=None):
     """
     Shows a Yes/No dialog to prompt the user to update.
+    If the user says No, remember the skipped version so we don't keep prompting.
     """
     import wx
     
+    # Check if the user already said "No" to this exact version
+    try:
+        import config
+        skipped = config.conf["weatherChecker"].get("skippedUpdateVersion", "")
+        if skipped and skipped.strip().lstrip("v") == latest_version.strip().lstrip("v"):
+            log.info(f"Update prompt suppressed: user previously skipped version {latest_version}")
+            return
+    except Exception:
+        pass
+
     dlg = UpdatePromptDialog(parent, latest_version, body)
     resp = dlg.ShowModal()
     dlg.Destroy()
     
     if resp == wx.ID_YES:
+        # Clear any previously skipped version
+        try:
+            import config
+            config.conf["weatherChecker"]["skippedUpdateVersion"] = ""
+            config.conf.save()
+        except Exception:
+            pass
         downloadAndInstallUpdate(latest_version, download_url)
+    else:
+        # Remember that user said No to this version — don't prompt again
+        try:
+            import config
+            config.conf["weatherChecker"]["skippedUpdateVersion"] = latest_version
+            config.conf.save()
+        except Exception:
+            pass
 
