@@ -731,14 +731,20 @@ def formatDay(ts):
 # ----------------------------------------------------
 # GitHub-based Add-on Version Checker
 # ----------------------------------------------------
+
+# Module-level session state — resets every time NVDA starts (never persisted)
+_update_session_dismissed = set()   # versions user said "No" to this session
+_update_check_scheduled = False     # guard: only one startup check per session
+
+
 def _normalize_version(v):
     """
-    Normalize a version string for reliable comparison.
-    Converts each dot-separated segment to an integer, eliminating leading zeros.
-    e.g. '2.0.05' -> [2, 0, 5]  and  '2.0.5' -> [2, 0, 5]
+    Normalize a version string for reliable integer comparison.
+    Eliminates leading zeros in each segment.
+    '2.0.05' -> [2, 0, 5]   '2.0.5' -> [2, 0, 5]   'v2.1' -> [2, 1]
     """
     parts = []
-    for p in v.strip().lstrip("v").split("."):
+    for p in str(v).strip().lstrip("v").split("."):
         try:
             parts.append(int(p))
         except ValueError:
@@ -746,233 +752,376 @@ def _normalize_version(v):
     return parts
 
 
-def checkForUpdates():
+def _versions_equal(a, b):
+    """Return True if two version strings represent the same version."""
+    va = _normalize_version(a)
+    vb = _normalize_version(b)
+    max_len = max(len(va), len(vb))
+    va += [0] * (max_len - len(va))
+    vb += [0] * (max_len - len(vb))
+    return va == vb
+
+
+def _version_is_newer(candidate, current):
+    """Return True if candidate version is strictly newer than current."""
+    vc = _normalize_version(candidate)
+    vn = _normalize_version(current)
+    max_len = max(len(vc), len(vn))
+    vc += [0] * (max_len - len(vc))
+    vn += [0] * (max_len - len(vn))
+    return vc > vn
+
+
+def _get_installed_version():
     """
-    Check for add-on updates on GitHub releases.
-    Returns (update_available, latest_version, download_url, release_notes)
+    Read the currently installed add-on version.
+    Tries addonHandler first; falls back to the buildVars constant.
     """
-    # Try to get the real installed version; fall back to buildVars as the source of truth
-    current_version = "2.0.7"
     try:
         addon = addonHandler.getCodeAddon()
-        v = addon.manifest.get("version") or addon.manifest.version
-        if v:
-            current_version = str(v).strip()
+        # manifest behaves like a dict — use subscript access, not attribute
+        v = addon.manifest["version"]
+        if v and str(v).strip():
+            return str(v).strip()
     except Exception:
         pass
+    # Hard-coded fallback that always matches current buildVars
+    return "2.0.8"
 
-    url = "https://api.github.com/repos/swarup-developer/weatherChecker-addon/releases/latest"
-    headers = {
-        "User-Agent": "WeatherCheckerNVDAUpdateChecker/2.0 (Contact: swarup.baral@example.com)"
-    }
-    
+
+def checkForUpdates():
+    """
+    Query GitHub for the latest release and compare against the installed version.
+
+    Returns:
+        (update_available: bool,
+         latest_version:   str,
+         download_url:     str,
+         release_notes:    str)
+
+    Raises WeatherClientError / NetworkError on unrecoverable failures.
+    """
+    current_version = _get_installed_version()
+
+    api_url = "https://api.github.com/repos/swarup-developer/weatherChecker-addon/releases/latest"
+    headers = {"User-Agent": "WeatherCheckerNVDA/2.0 (weatherchecker-addon update check)"}
+
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            tag = data.get("tag_name", current_version).strip()
-            tag_clean = tag.lstrip("v")
-            
-            assets = data.get("assets", [])
-            download_url = ""
-            for asset in assets:
-                asset_name = asset.get("name", "")
-                if asset_name.endswith(".nvda-addon"):
-                    download_url = asset.get("browser_download_url", "")
-                    break
-            if not download_url:
-                download_url = data.get("html_url", "https://github.com/swarup-developer/weatherChecker-addon")
-                
-            body = data.get("body", "")
-            
-            # Reliable semantic version comparison (handles leading zeros like 2.0.05)
-            try:
-                curr_parts = _normalize_version(current_version)
-                tag_parts = _normalize_version(tag_clean)
-                
-                # Zero pad to same length if needed
-                max_len = max(len(curr_parts), len(tag_parts))
-                curr_parts += [0] * (max_len - len(curr_parts))
-                tag_parts += [0] * (max_len - len(tag_parts))
-                
-                update_available = tag_parts > curr_parts
-            except Exception:
-                update_available = tag_clean != current_version
-                
-            return update_available, tag_clean, download_url, body
-        elif resp.status_code == 404:
-            # No releases published yet
-            return False, current_version, "", ""
-        else:
-            raise WeatherClientError(f"HTTP Error {resp.status_code} while checking for updates.")
+        resp = requests.get(api_url, headers=headers, timeout=15)
+    except requests.exceptions.ConnectionError:
+        raise NetworkError(_(
+            "Could not connect to the update server. Please check your internet connection."
+        ))
+    except requests.exceptions.Timeout:
+        raise NetworkError(_(
+            "Update check timed out. The server did not respond in time."
+        ))
     except requests.RequestException as e:
-        raise NetworkError(_("Network failure while checking for updates: ") + str(e))
+        raise NetworkError(_(
+            "Network failure while checking for updates: "
+        ) + str(e))
+
+    if resp.status_code == 404:
+        # No releases published on this repository yet
+        log.info("Update check: no releases found (404).")
+        return False, current_version, "", ""
+
+    if resp.status_code == 403:
+        # GitHub API rate limit
+        raise WeatherClientError(_(
+            "Update check was rate-limited by GitHub. Please try again later."
+        ))
+
+    if resp.status_code != 200:
+        raise WeatherClientError(_(
+            "Update server returned an unexpected response (HTTP {code})."
+        ).format(code=resp.status_code))
+
+    try:
+        data = resp.json()
+    except ValueError:
+        raise WeatherClientError(_(
+            "Update server returned an invalid response. Please try again later."
+        ))
+
+    # Extract tag — strip leading 'v' for clean comparison
+    tag_raw = data.get("tag_name", "").strip()
+    if not tag_raw:
+        log.warning("Update check: release has no tag_name.")
+        return False, current_version, "", ""
+    latest_version = tag_raw.lstrip("v")
+
+    # Find the .nvda-addon asset download URL
+    download_url = ""
+    for asset in data.get("assets", []):
+        if asset.get("name", "").endswith(".nvda-addon"):
+            download_url = asset.get("browser_download_url", "")
+            break
+    if not download_url:
+        # Fall back to the HTML release page so the user can download manually
+        download_url = data.get("html_url",
+                                "https://github.com/swarup-developer/weatherChecker-addon/releases")
+
+    release_notes = data.get("body", "") or ""
+
+    update_available = _version_is_newer(latest_version, current_version)
+
+    log.info(
+        f"Update check complete: installed={current_version}, "
+        f"latest={latest_version}, update_available={update_available}"
+    )
+    return update_available, latest_version, download_url, release_notes
+
+
+def _save_update_state(key, value):
+    """Safely persist an update tracking value to NVDA config."""
+    try:
+        import config as _cfg
+        _cfg.conf["weatherChecker"][key] = value
+        _cfg.conf.save()
+    except Exception as e:
+        log.warning(f"Could not save update state [{key}]: {e}")
+
+
+def _read_update_state(key, default=""):
+    """Safely read an update tracking value from NVDA config."""
+    try:
+        import config as _cfg
+        val = _cfg.conf["weatherChecker"][key]
+        return val if val is not None else default
+    except Exception:
+        return default
+
+
+def promptUpdate(latest_version, download_url, release_notes, parent=None):
+    """
+    Gate-checks and shows the update dialog exactly once per session / version.
+
+    Anti-spam rules enforced here:
+      1. If the user successfully installed this version already → silent skip.
+      2. If the user dismissed this version in the current NVDA session → silent skip.
+      3. Otherwise show the dialog once; record the outcome.
+    """
+    import wx
+
+    lv = latest_version.strip().lstrip("v")
+
+    # Rule 1 — user already installed this version (persisted across restarts)
+    last_installed = _read_update_state("lastUpdatedVersion")
+    if last_installed and _versions_equal(last_installed, lv):
+        log.info(
+            f"Update prompt suppressed: v{lv} was already installed by the user."
+        )
+        return
+
+    # Rule 2 — user said No this session (in-memory, resets on NVDA restart)
+    if lv in _update_session_dismissed:
+        log.info(
+            f"Update prompt suppressed: user dismissed v{lv} this session."
+        )
+        return
+
+    # Show the dialog
+    try:
+        dlg = UpdatePromptDialog(parent, lv, release_notes)
+        result = dlg.ShowModal()
+        dlg.Destroy()
+    except Exception as e:
+        log.error(f"Update dialog failed to display: {e}", exc_info=True)
+        return
+
+    if result == wx.ID_YES:
+        # User accepted — start download/install and record intent
+        _save_update_state("lastOfferedVersion", lv)
+        downloadAndInstallUpdate(lv, download_url)
+    else:
+        # User declined — remember for this session only (not persisted)
+        _update_session_dismissed.add(lv)
+        log.info(
+            f"User declined update to v{lv}. "
+            "Will not prompt again this session. "
+            "Will re-check after next NVDA restart."
+        )
 
 
 def downloadAndInstallUpdate(latest_version, download_url):
     """
-    Downloads the nvda-addon file and installs it programmatically,
-    then prompts to restart NVDA.
+    Downloads the .nvda-addon file in a background thread and installs it on the
+    main wx thread.  Records lastUpdatedVersion on success so the prompt is
+    permanently suppressed for this version.
     """
     import os
     import tempfile
     import threading
-    import requests
-    from logHandler import log
-    
-    def run():
+    import requests as _requests
+
+    def _run():
         import speech
-        import addonHandler
+        import addonHandler as _ah
         import gui
         import core
         import wx
-        
-        wx.CallAfter(speech.speakMessage, _("Downloading Weather Checker update..."))
-        
+
+        wx.CallAfter(speech.speakMessage, _(
+            "Downloading Weather Checker update. Please wait..."
+        ))
+
+        temp_path = None
         try:
-            headers = {
-                "User-Agent": "WeatherCheckerNVDAUpdateChecker/1.0 (Contact: swarup.baral@example.com)"
+            dl_headers = {
+                "User-Agent": "WeatherCheckerNVDA/2.0 (addon update download)"
             }
-            resp = requests.get(download_url, headers=headers, stream=True, timeout=60)
-            resp.raise_for_status()
-            
-            temp_dir = tempfile.gettempdir()
-            temp_path = os.path.join(temp_dir, f"weatherChecker-{latest_version}.nvda-addon")
-            
-            with open(temp_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    
-            def install_and_restart():
+            dl_resp = _requests.get(
+                download_url, headers=dl_headers, stream=True, timeout=60
+            )
+            dl_resp.raise_for_status()
+
+            temp_path = os.path.join(
+                tempfile.gettempdir(),
+                f"weatherChecker-{latest_version}.nvda-addon"
+            )
+            with open(temp_path, "wb") as fp:
+                for chunk in dl_resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        fp.write(chunk)
+
+            def _install_on_main_thread():
+                nonlocal temp_path
                 try:
-                    speech.speakMessage(_("Installing update..."))
-                    
-                    bundle = addonHandler.AddonBundle(temp_path)
-                    bundleName = bundle.manifest['name']
-                    
-                    # Request removal of the previous addon version to avoid OsError/replace failures
-                    curAddons = list(addonHandler.getAvailableAddons())
-                    prevAddon = next((addon for addon in curAddons if bundleName == addon.manifest['name']), None)
-                    if prevAddon:
-                        log.info(f"Marking existing addon {bundleName} version {prevAddon.manifest['version']} for removal before update")
-                        prevAddon.requestRemove()
-                        
-                    addon = addonHandler.installAddonBundle(bundle)
-                    if addon is None:
-                        raise Exception("addonHandler failed to install the addon bundle.")
-                        
+                    speech.speakMessage(_(
+                        "Installing Weather Checker update..."
+                    ))
+
+                    bundle = _ah.AddonBundle(temp_path)
+                    bundle_name = bundle.manifest["name"]
+
+                    # Mark existing version for removal before installing new one
+                    for existing in list(_ah.getAvailableAddons()):
+                        if existing.manifest["name"] == bundle_name:
+                            log.info(
+                                f"Marking {bundle_name} "
+                                f"v{existing.manifest['version']} for removal."
+                            )
+                            existing.requestRemove()
+                            break
+
+                    installed = _ah.installAddonBundle(bundle)
+                    if installed is None:
+                        raise RuntimeError(
+                            "addonHandler.installAddonBundle returned None."
+                        )
+
+                    # Persist the installed version — suppresses future prompts
+                    _save_update_state("lastUpdatedVersion", latest_version)
+                    _save_update_state("lastOfferedVersion", latest_version)
+
+                    # Clean up temp file
                     try:
                         os.remove(temp_path)
-                    except Exception:
-                        pass
-                        
-                    msg = _("Weather Checker has been updated to version {version}. You must restart NVDA for the changes to take effect. Would you like to restart now?").format(version=latest_version)
-                    resp_val = gui.messageBox(
-                        message=msg,
-                        caption=_("Restart NVDA"),
-                        style=wx.YES_NO | wx.ICON_QUESTION
-                    )
-                    if resp_val == wx.YES:
-                        core.restart()
-                except Exception as e:
-                    log.error("Failed to install update on main thread", exc_info=True)
-                    error_msg = _("Update failed: ") + str(e)
-                    speech.speakMessage(error_msg)
-                    gui.messageBox(error_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR)
-                    try:
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                    except Exception:
+                        temp_path = None
+                    except OSError:
                         pass
 
-            wx.CallAfter(install_and_restart)
-            
-        except Exception as e:
-            log.error("Failed to download update in background thread", exc_info=True)
-            error_msg = _("Update failed: ") + str(e)
-            wx.CallAfter(speech.speakMessage, error_msg)
-            wx.CallAfter(gui.messageBox, error_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR)
-            
-    t = threading.Thread(target=run)
-    t.daemon = True
+                    # Offer restart
+                    restart_msg = _(
+                        "Weather Checker has been updated to version {ver}. "
+                        "You must restart NVDA for the changes to take effect. "
+                        "Would you like to restart now?"
+                    ).format(ver=latest_version)
+                    if gui.messageBox(
+                        restart_msg,
+                        _("Restart NVDA"),
+                        wx.YES_NO | wx.ICON_QUESTION
+                    ) == wx.YES:
+                        core.restart()
+
+                except Exception as exc:
+                    log.error(
+                        "Failed to install Weather Checker update.", exc_info=True
+                    )
+                    err_msg = _(
+                        "Weather Checker update failed: {err}"
+                    ).format(err=str(exc))
+                    speech.speakMessage(err_msg)
+                    gui.messageBox(err_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR)
+                finally:
+                    if temp_path and os.path.exists(temp_path):
+                        try:
+                            os.remove(temp_path)
+                        except OSError:
+                            pass
+
+            wx.CallAfter(_install_on_main_thread)
+
+        except Exception as exc:
+            log.error(
+                "Failed to download Weather Checker update.", exc_info=True
+            )
+            err_msg = _(
+                "Weather Checker update download failed: {err}"
+            ).format(err=str(exc))
+            wx.CallAfter(speech.speakMessage, err_msg)
+            wx.CallAfter(
+                gui.messageBox, err_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR
+            )
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+    t = threading.Thread(target=_run, name="WCUpdateDownload", daemon=True)
     t.start()
 
 
 class UpdatePromptDialog(wx.Dialog if wx else object):
-    """Dialog to prompt the user about a new add-on update, displaying the changelog in a readable read-only edit box."""
-    def __init__(self, parent, latest_version, body):
+    """
+    Accessible dialog shown once when a newer version is available.
+    Displays version info and optional release notes.
+    """
+    def __init__(self, parent, latest_version, release_notes):
         import wx
-        super().__init__(parent, title=_("Weather Checker Update"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        super().__init__(
+            parent,
+            title=_("Weather Checker Update Available"),
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER
+        )
         self.latest_version = latest_version
-        self.body = body
-        self._buildGui()
-        
-    def _buildGui(self):
+        self.release_notes = release_notes
+        self._build_gui()
+
+    def _build_gui(self):
         import wx
-        mainSizer = wx.BoxSizer(wx.VERTICAL)
-        
-        infoText = wx.StaticText(self, label=_("New version detected, update add-on - {version}").format(version=self.latest_version))
-        mainSizer.Add(infoText, 0, wx.ALL | wx.EXPAND, 10)
-        
-        if self.body and self.body.strip():
-            whatsNewLabel = wx.StaticText(self, label=_("What's new in this version:"))
-            mainSizer.Add(whatsNewLabel, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 10)
-            
-            # Read-only multiline edit field for release notes
-            self.notesCtrl = wx.TextCtrl(self, value=self.body.strip(), style=wx.TE_MULTILINE | wx.TE_READONLY, size=(450, 200))
-            mainSizer.Add(self.notesCtrl, 1, wx.ALL | wx.EXPAND, 10)
-            
-        promptText = wx.StaticText(self, label=_("Do you want to update now?"))
-        mainSizer.Add(promptText, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
-        
-        btnSizer = self.CreateButtonSizer(wx.YES | wx.NO)
-        mainSizer.Add(btnSizer, 0, wx.ALL | wx.ALIGN_RIGHT, 10)
-        
-        # Set focus to YES button by default
-        yesBtn = self.FindWindowById(wx.ID_YES)
-        if yesBtn:
-            yesBtn.SetFocus()
-            
-        self.SetSizerAndFit(mainSizer)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Main message — matches spec exactly
+        msg = _(
+            "A new version of Weather Checker is available (version {ver}). "
+            "Would you like to update now?"
+        ).format(ver=self.latest_version)
+        info = wx.StaticText(self, label=msg)
+        info.Wrap(440)
+        sizer.Add(info, 0, wx.ALL | wx.EXPAND, 12)
+
+        # Release notes (optional)
+        if self.release_notes and self.release_notes.strip():
+            notes_label = wx.StaticText(self, label=_("What's new:"))
+            sizer.Add(notes_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 12)
+            notes_ctrl = wx.TextCtrl(
+                self,
+                value=self.release_notes.strip(),
+                style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_AUTO_URL,
+                size=(440, 180)
+            )
+            sizer.Add(notes_ctrl, 1, wx.ALL | wx.EXPAND, 12)
+
+        btn_sizer = self.CreateButtonSizer(wx.YES | wx.NO)
+        sizer.Add(btn_sizer, 0, wx.ALL | wx.ALIGN_RIGHT, 12)
+
+        # Accessible: focus the YES button so screen readers announce it first
+        yes_btn = self.FindWindowById(wx.ID_YES)
+        if yes_btn:
+            yes_btn.SetFocus()
+
+        self.SetSizerAndFit(sizer)
         self.CentreOnParent()
-
-
-def promptUpdate(latest_version, download_url, body, parent=None):
-    """
-    Shows a Yes/No dialog to prompt the user to update.
-    If the user says No, remember the skipped version so we don't keep prompting.
-    """
-    import wx
-    
-    # Check if the user already said "No" to this exact version
-    try:
-        import config
-        skipped = config.conf["weatherChecker"].get("skippedUpdateVersion", "")
-        if skipped and skipped.strip().lstrip("v") == latest_version.strip().lstrip("v"):
-            log.info(f"Update prompt suppressed: user previously skipped version {latest_version}")
-            return
-    except Exception:
-        pass
-
-    dlg = UpdatePromptDialog(parent, latest_version, body)
-    resp = dlg.ShowModal()
-    dlg.Destroy()
-    
-    if resp == wx.ID_YES:
-        # Clear any previously skipped version
-        try:
-            import config
-            config.conf["weatherChecker"]["skippedUpdateVersion"] = ""
-            config.conf.save()
-        except Exception:
-            pass
-        downloadAndInstallUpdate(latest_version, download_url)
-    else:
-        # Remember that user said No to this version — don't prompt again
-        try:
-            import config
-            config.conf["weatherChecker"]["skippedUpdateVersion"] = latest_version
-            config.conf.save()
-        except Exception:
-            pass
-

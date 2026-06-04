@@ -1,8 +1,17 @@
-Version 2.0.7:
-- Improved: Location search now uses geocode.maps.co as a dedicated keyed geocoding service, eliminating "rate limited or forbidden" errors during manual location searches.
-- Location search priority: OpenWeather Geocoding → geocode.maps.co → Nominatim (last resort).
+Version 2.0.8 — Final Release:
+- Fixed: Update notification now shows exactly once per NVDA session when a newer version exists.
+- Fixed: Pressing No on the update dialog suppresses the prompt for the rest of the session only (resets on next NVDA restart so you'll be notified again if still not updated).
+- Fixed: After successfully installing an update, the prompt is permanently suppressed for that version — no more repeated prompts after updating.
+- Fixed: Version comparison correctly handles all version formats (e.g. 2.0.05 == 2.0.5).
+- Fixed: The startup update check now has a session guard — it can never fire more than once per NVDA session.
+- Fixed: Update server errors (rate limits, timeouts, invalid manifests) are handled gracefully with specific error messages.
+- Improved: Update dialog message now reads: "A new version of Weather Checker is available. Would you like to update now?"
+- Improved: geocode.maps.co API key integrated for reliable location search (no more rate-limited errors).
 
-Version 2.0.6:
+Version 2.0.7:
+- Improved: Location search now uses geocode.maps.co as a dedicated keyed geocoding service, eliminating rate-limited errors.
+
+
 - Fixed: Update notification no longer repeats every startup after pressing No — the skipped version is remembered.
 - Fixed: Auto-detect location now tries three IP geolocation services in sequence, so a rate-limited service no longer causes a "Geocoding service rate limited" error.
 - Fixed: Version comparison now handles leading-zero version numbers (e.g. 2.0.05 vs 2.0.5) correctly, preventing false update alerts.

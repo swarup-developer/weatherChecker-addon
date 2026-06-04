@@ -32,7 +32,11 @@ confspec_dict = {
         # Update Settings
         "auto_update_check": "boolean(default=true)",
         "copy_to_clipboard": "boolean(default=false)",
-        "skippedUpdateVersion": "string(default='')",
+        # Persistent: version the user successfully installed via the update dialog
+        "lastUpdatedVersion": "string(default='')",
+        # Persistent: latest version that was already shown/offered this install lifetime
+        # Reset to '' when a newer version surpasses it
+        "lastOfferedVersion": "string(default='')",
         
         # Weather Information options (to speak/announce)
         "info_currentWeather": "boolean(default=true)",

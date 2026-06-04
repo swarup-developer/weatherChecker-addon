@@ -28,6 +28,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         "kb:NVDA+shift+l": "cycleFavoriteLocations"
     }
 
+    # Class-level flag: ensures the startup update check fires exactly once per session
+    _update_check_done = False
+
     def __init__(self):
         super().__init__()
         
@@ -123,19 +126,26 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     # Background Startup Update Checking
     # ----------------------------------------------------
     def startStartupUpdateCheck(self):
-        """Starts a background update checker delay thread."""
-        t = threading.Thread(target=self._runStartupUpdateCheck)
-        t.daemon = True
+        """Starts the one-shot background update checker (fires at most once per session)."""
+        if GlobalPlugin._update_check_done:
+            return
+        GlobalPlugin._update_check_done = True
+        t = threading.Thread(
+            target=self._runStartupUpdateCheck,
+            name="WCStartupUpdateCheck",
+            daemon=True
+        )
         t.start()
 
     def _runStartupUpdateCheck(self):
-        # Wait 15 seconds after NVDA starts so it doesn't interrupt speech initially
+        # Wait 15 s after NVDA starts so initial speech is not interrupted
         time.sleep(15.0)
         try:
             update_available, latest_version, download_url, body = weather_client.checkForUpdates()
             if update_available:
                 wx.CallAfter(weather_client.promptUpdate, latest_version, download_url, body)
         except Exception:
+            # Silent fail — update check is non-critical; errors are logged by checkForUpdates
             pass
 
     # ----------------------------------------------------
