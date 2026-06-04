@@ -7,6 +7,11 @@ import datetime
 from logHandler import log
 import addonHandler
 
+try:
+    import wx
+except ImportError:
+    wx = None
+
 addonHandler.initTranslation()
 
 class WeatherClientError(Exception):
@@ -807,7 +812,7 @@ def downloadAndInstallUpdate(latest_version, download_url):
     t.start()
 
 
-class UpdatePromptDialog(wx.Dialog):
+class UpdatePromptDialog(wx.Dialog if wx else object):
     """Dialog to prompt the user about a new add-on update, displaying the changelog in a readable read-only edit box."""
     def __init__(self, parent, latest_version, body):
         import wx
