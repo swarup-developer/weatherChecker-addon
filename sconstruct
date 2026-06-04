@@ -90,6 +90,7 @@ for dir in langDirs:
 	moFile = env.gettextMoFile(poFile)
 	env.Depends(moFile, poFile)
 	translatedManifest = env.NVDATranslatedManifest(dir.File("manifest.ini"), [moFile, os.path.join("manifest-translated.ini.tpl")])
+	env.Depends(translatedManifest, 'buildVars.py')
 	env.Depends(addon, [translatedManifest, moFile])
 
 pythonFiles = expandGlobs(buildVars.pythonSources)
@@ -102,6 +103,7 @@ env.Alias('pot', pot)
 env.Depends(pot, i18nFiles)
 
 manifest = env.NVDAManifest(os.path.join("addon", "manifest.ini"), os.path.join("manifest.ini.tpl"))
+env.Depends(manifest, 'buildVars.py')
 
 env.Depends(addon, manifest)
 env.Default(addon)
