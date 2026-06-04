@@ -578,7 +578,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
             ("info_uvIndex", _("UV index")),
             ("info_clouds", _("Cloud coverage")),
             ("info_dewPoint", _("Dew point")),
-            ("info_airQuality", _("Air quality when available"))
+            ("info_airQuality", _("Air quality index (requires OpenWeather API)"))
         ]
         for key, label in info_keys:
             cb = wx.CheckBox(self, label=label)
@@ -625,8 +625,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         astro_keys = [
             ("astro_sunrise", _("Sunrise time")),
             ("astro_sunset", _("Sunset time")),
-            ("astro_moonrise", _("Moonrise time")),
-            ("astro_moonset", _("Moonset time")),
             ("astro_moonphase", _("Moon phase"))
         ]
         for key, label in astro_keys:
@@ -915,17 +913,13 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
 
     def onUpdateCheckComplete(self, update_available, latest_version, download_url, body):
         self.checkUpdateBtn.Enable()
-        self.checkUpdateBtn.SetLabel(_("Check for Updates Now"))
-        
+        self.checkUpdateBtn.SetLabel(_("Check for &Updates Now"))
+
         if update_available:
             weather_client.promptUpdate(latest_version, download_url, body, parent=self)
         else:
-            try:
-                addon = addonHandler.getCodeAddon()
-                current_version = addon.manifest.version
-            except Exception:
-                current_version = "1.0.4"
-            msg = _("Weather Checker is up to date. Current version: {version}.").format(version=current_version)
+            current_version = weather_client._get_installed_version()
+            msg = _("Weather Checker is up to date. Installed version: {version}.").format(version=current_version)
             ui.message(msg)
             gui.messageBox(msg, _("Weather Checker Update"), wx.OK | wx.ICON_INFORMATION, parent=self)
 

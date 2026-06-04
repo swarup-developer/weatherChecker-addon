@@ -19,13 +19,18 @@ import addonHandler
 addonHandler.initTranslation()
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
-    # Bind gestures to their script handlers
+    """
+    Weather Checker NVDA Add-on.
+    Only NVDA+Shift+W is assigned by default. All other commands can be
+    assigned freely via NVDA Menu > Preferences > Input Gestures > Weather Checker.
+    """
+
+    # NVDA Input Gestures category name for all Weather Checker scripts
+    scriptCategory = _("Weather Checker")
+
+    # Only the primary gesture is hardcoded — all others are user-configurable
     __gestures = {
         "kb:NVDA+shift+w": "speakCurrentWeather",
-        "kb:NVDA+shift+f": "speakForecast",
-        "kb:NVDA+shift+a": "speakActiveAlerts",
-        "kb:NVDA+shift+s": "speakAstronomy",
-        "kb:NVDA+shift+l": "cycleFavoriteLocations"
     }
 
     # Class-level flag: ensures the startup update check fires exactly once per session
@@ -455,8 +460,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         except Exception as e:
             wx.CallAfter(ui.message, _("Weather Checker connection failed. Please check network and API key settings."))
 
-    # Gesture 1: Speak Current Weather
+    # Script 1: Speak Current Weather (NVDA+Shift+W by default)
     def script_speakCurrentWeather(self, gesture):
+        """Report current weather conditions for the configured location. Press twice quickly to copy to clipboard."""
         now = time.time()
         copy_pref = config_manager.getConfigVal("copy_to_clipboard")
         if copy_pref or (now - self._last_w_press < 0.5):
@@ -549,8 +555,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         else:
             ui.message(full_msg)
 
-    # Gesture 2: Speak Forecast
+    # Script 2: Speak Forecast (no default gesture — assign in Input Gestures)
     def script_speakForecast(self, gesture):
+        """Report the weather forecast for the configured location. Press twice quickly to copy to clipboard."""
         now = time.time()
         copy_pref = config_manager.getConfigVal("copy_to_clipboard")
         if copy_pref or (now - self._last_f_press < 0.5):
@@ -660,8 +667,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         else:
             ui.message(full_msg)
 
-    # Gesture 3: Speak Active Weather Alerts
+    # Script 3: Speak Active Weather Alerts (no default gesture — assign in Input Gestures)
     def script_speakActiveAlerts(self, gesture):
+        """Report active weather alerts for the configured location. Press twice quickly to copy to clipboard."""
         now = time.time()
         copy_pref = config_manager.getConfigVal("copy_to_clipboard")
         if copy_pref or (now - self._last_a_press < 0.5):
@@ -705,8 +713,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         else:
             ui.message(msg)
 
-    # Gesture 4: Speak Astronomy
+    # Script 4: Speak Astronomy (no default gesture — assign in Input Gestures)
     def script_speakAstronomy(self, gesture):
+        """Report astronomy data (sunrise, sunset, moon phase) for the configured location. Press twice quickly to copy to clipboard."""
         now = time.time()
         copy_pref = config_manager.getConfigVal("copy_to_clipboard")
         if copy_pref or (now - self._last_s_press < 0.5):
@@ -726,19 +735,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             if config_manager.getConfigVal("astro_sunrise") and astro.get("sunrise") is not None:
                 t_str = weather_client.formatTimestamp(astro["sunrise"])
                 parts.append(_("Sunrise: {time}").format(time=t_str))
-                
+
             if config_manager.getConfigVal("astro_sunset") and astro.get("sunset") is not None:
                 t_str = weather_client.formatTimestamp(astro["sunset"])
                 parts.append(_("Sunset: {time}").format(time=t_str))
-                
-            if config_manager.getConfigVal("astro_moonrise") and astro.get("moonrise") is not None:
-                t_str = weather_client.formatTimestamp(astro["moonrise"])
-                parts.append(_("Moonrise: {time}").format(time=t_str))
-                
-            if config_manager.getConfigVal("astro_moonset") and astro.get("moonset") is not None:
-                t_str = weather_client.formatTimestamp(astro["moonset"])
-                parts.append(_("Moonset: {time}").format(time=t_str))
-                
+
             if config_manager.getConfigVal("astro_moonphase") and astro.get("moon_phase") is not None:
                 phase_name = weather_client.getMoonPhaseName(astro["moon_phase"])
                 parts.append(_("Moon phase: {phase}").format(phase=phase_name))
@@ -761,8 +762,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         else:
             ui.message(full_msg)
 
-    # Gesture 5: Cycle Favorites
+    # Script 5: Cycle Favorite Locations (no default gesture — assign in Input Gestures)
     def script_cycleFavoriteLocations(self, gesture):
+        """Cycle through saved favorite locations and report weather for each."""
         fav_json = config_manager.getConfigVal("favorites")
         try:
             favorites = json.loads(fav_json)
@@ -783,13 +785,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         fav = favorites[idx]
         ui.message(_("Checking weather for favorite location: {name}").format(name=fav["name"]))
         self._runAsyncWeatherAction(
-            self._reportCurrentWeather, 
-            copy_to_clipboard=False, 
-            lat=fav["lat"], 
-            lon=fav["lon"], 
+            self._reportCurrentWeather,
+            copy_to_clipboard=False,
+            lat=fav["lat"],
+            lon=fav["lon"],
             location_name=fav["name"]
         )
 
+    # Script 6: Open Weather Checker Settings (no default gesture — assign in Input Gestures)
+    def script_openSettings(self, gesture):
+        """Open the NVDA Settings dialog, focused on Weather Checker settings."""
+        import gui
+        from gui.settingsDialogs import NVDASettingsDialog
+        wx.CallAfter(
+            gui.mainFrame._popupSettingsDialog,
+            NVDASettingsDialog,
+            WeatherCheckerSettingsPanel
+        )
 
 class AlertCheckerThread(threading.Thread):
     def __init__(self, plugin):

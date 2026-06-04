@@ -2,7 +2,7 @@ import os
 
 addon_info = {
     "addon_name": "weatherChecker",
-    "addon_version": "2.0.8",
+    "addon_version": "2.1.0",
     "summary": "Weather Checker",
     "description": "Provides weather conditions, forecasts, astronomy data, and weather alerts using OpenWeather and Pirate Weather APIs.",
     "author": "Swarup Baral",
