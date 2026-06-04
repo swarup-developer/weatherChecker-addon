@@ -1,3 +1,5 @@
 - Fixed programmatic background update downloading and installation to prevent locks or failures.
 - Ensured thread-safe GUI updates and installation of the add-on update.
 - Marked previous version for removal automatically to prevent installation conflicts.
+- Fixed SCons build system dependency tracking to ensure manifest.ini is always updated when version changes.
+- Added comprehensive user documentation and keyboard shortcuts guide.
