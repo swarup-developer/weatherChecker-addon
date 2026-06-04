@@ -807,24 +807,55 @@ def downloadAndInstallUpdate(latest_version, download_url):
     t.start()
 
 
+class UpdatePromptDialog(wx.Dialog):
+    """Dialog to prompt the user about a new add-on update, displaying the changelog in a readable read-only edit box."""
+    def __init__(self, parent, latest_version, body):
+        import wx
+        super().__init__(parent, title=_("Weather Checker Update"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        self.latest_version = latest_version
+        self.body = body
+        self._buildGui()
+        
+    def _buildGui(self):
+        import wx
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        
+        infoText = wx.StaticText(self, label=_("New version detected, update add-on - {version}").format(version=self.latest_version))
+        mainSizer.Add(infoText, 0, wx.ALL | wx.EXPAND, 10)
+        
+        if self.body and self.body.strip():
+            whatsNewLabel = wx.StaticText(self, label=_("What's new in this version:"))
+            mainSizer.Add(whatsNewLabel, 0, wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND, 10)
+            
+            # Read-only multiline edit field for release notes
+            self.notesCtrl = wx.TextCtrl(self, value=self.body.strip(), style=wx.TE_MULTILINE | wx.TE_READONLY, size=(450, 200))
+            mainSizer.Add(self.notesCtrl, 1, wx.ALL | wx.EXPAND, 10)
+            
+        promptText = wx.StaticText(self, label=_("Do you want to update now?"))
+        mainSizer.Add(promptText, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
+        
+        btnSizer = self.CreateButtonSizer(wx.YES | wx.NO)
+        mainSizer.Add(btnSizer, 0, wx.ALL | wx.ALIGN_RIGHT, 10)
+        
+        # Set focus to YES button by default
+        yesBtn = self.FindWindowById(wx.ID_YES)
+        if yesBtn:
+            yesBtn.SetFocus()
+            
+        self.SetSizerAndFit(mainSizer)
+        self.CentreOnParent()
+
+
 def promptUpdate(latest_version, download_url, body, parent=None):
     """
     Shows a Yes/No dialog to prompt the user to update.
     """
-    import gui
     import wx
     
-    msg = _("New version detected, update add-on - {version}").format(version=latest_version)
-    if body and body.strip():
-        msg += "\n\n" + _("What's new:") + "\n" + body.strip()
-    msg += "\n\n" + _("Do you want to update now?")
+    dlg = UpdatePromptDialog(parent, latest_version, body)
+    resp = dlg.ShowModal()
+    dlg.Destroy()
     
-    resp = gui.messageBox(
-        message=msg,
-        caption=_("Weather Checker Update"),
-        style=wx.YES_NO | wx.ICON_QUESTION,
-        parent=parent
-    )
-    if resp == wx.YES:
+    if resp == wx.ID_YES:
         downloadAndInstallUpdate(latest_version, download_url)
 

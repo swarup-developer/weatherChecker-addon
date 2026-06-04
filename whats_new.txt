@@ -1,3 +1,4 @@
-- Completely automated background updates: the add-on now downloads, installs, and prompts to restart NVDA directly, without opening the browser.
-- Dialog prompts now show the full "What's new" release notes before installing.
-- Pushed tag and release generation are fully automated in the CI/CD pipeline on commit/push to master.
+- Replaced the simple message box dialog for update prompts with a custom UpdatePromptDialog.
+- The "What's New" contents are now displayed inside a read-only multiline edit box, allowing NVDA screen-reader users to navigate and read the release notes easily.
+- Focus is set to the "Yes" button by default in the update prompt.
+- Bumped add-on version to 2.0.01.
