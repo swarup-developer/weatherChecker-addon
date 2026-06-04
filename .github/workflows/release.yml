@@ -3,7 +3,7 @@ name: Build and Release NVDA Add-on
 on:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 permissions:
