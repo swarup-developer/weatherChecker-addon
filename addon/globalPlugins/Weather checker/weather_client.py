@@ -695,7 +695,7 @@ def checkForUpdates():
         current_version = addon.manifest.version
     except Exception:
         current_version = "1.0.4"
-    url = "https://api.github.com/repos/swarup-baral/weatherChecker-addon/releases/latest"
+    url = "https://api.github.com/repos/swarup-developer/weatherChecker-addon/releases/latest"
     headers = {
         "User-Agent": "WeatherCheckerNVDAUpdateChecker/1.0 (Contact: swarup.baral@example.com)"
     }
@@ -705,7 +705,17 @@ def checkForUpdates():
         if resp.status_code == 200:
             data = resp.json()
             tag = data.get("tag_name", "1.0.0").strip().lstrip("v")
-            download_url = data.get("html_url", "https://github.com/swarup-baral/weatherChecker-addon")
+            
+            assets = data.get("assets", [])
+            download_url = ""
+            for asset in assets:
+                asset_name = asset.get("name", "")
+                if asset_name.endswith(".nvda-addon"):
+                    download_url = asset.get("browser_download_url", "")
+                    break
+            if not download_url:
+                download_url = data.get("html_url", "https://github.com/swarup-developer/weatherChecker-addon")
+                
             body = data.get("body", "")
             
             # Semantic Version check
@@ -730,3 +740,91 @@ def checkForUpdates():
             raise WeatherClientError(f"HTTP Error {resp.status_code} while checking for updates.")
     except requests.RequestException as e:
         raise NetworkError(_("Network failure while checking for updates: ") + str(e))
+
+
+def downloadAndInstallUpdate(latest_version, download_url):
+    """
+    Downloads the nvda-addon file and installs it programmatically,
+    then prompts to restart NVDA.
+    """
+    import os
+    import tempfile
+    import threading
+    import requests
+    from logHandler import log
+    
+    def run():
+        import speech
+        import addonHandler
+        import gui
+        import core
+        import wx
+        
+        wx.CallAfter(speech.speakMessage, _("Downloading Weather Checker update..."))
+        
+        try:
+            resp = requests.get(download_url, stream=True, timeout=60)
+            resp.raise_for_status()
+            
+            temp_dir = tempfile.gettempdir()
+            temp_path = os.path.join(temp_dir, f"weatherChecker-{latest_version}.nvda-addon")
+            
+            with open(temp_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            wx.CallAfter(speech.speakMessage, _("Installing update..."))
+            
+            bundle = addonHandler.AddonBundle(temp_path)
+            addon = addonHandler.installAddonBundle(bundle)
+            if addon is None:
+                raise Exception("addonHandler failed to install the addon bundle.")
+                
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+                
+            def ask_restart():
+                msg = _("Weather Checker has been updated to version {version}. You must restart NVDA for the changes to take effect. Would you like to restart now?").format(version=latest_version)
+                resp = gui.messageBox(
+                    message=msg,
+                    caption=_("Restart NVDA"),
+                    style=wx.YES_NO | wx.ICON_QUESTION
+                )
+                if resp == wx.YES:
+                    core.restart()
+            wx.CallAfter(ask_restart)
+            
+        except Exception as e:
+            log.error("Failed to download and install update", exc_info=True)
+            error_msg = _("Update failed: ") + str(e)
+            wx.CallAfter(speech.speakMessage, error_msg)
+            wx.CallAfter(gui.messageBox, error_msg, _("Update Failed"), wx.OK | wx.ICON_ERROR)
+            
+    t = threading.Thread(target=run)
+    t.daemon = True
+    t.start()
+
+
+def promptUpdate(latest_version, download_url, body, parent=None):
+    """
+    Shows a Yes/No dialog to prompt the user to update.
+    """
+    import gui
+    import wx
+    
+    msg = _("New version detected, update add-on - {version}").format(version=latest_version)
+    if body and body.strip():
+        msg += "\n\n" + _("What's new:") + "\n" + body.strip()
+    msg += "\n\n" + _("Do you want to update now?")
+    
+    resp = gui.messageBox(
+        message=msg,
+        caption=_("Weather Checker Update"),
+        style=wx.YES_NO | wx.ICON_QUESTION,
+        parent=parent
+    )
+    if resp == wx.YES:
+        downloadAndInstallUpdate(latest_version, download_url)
+

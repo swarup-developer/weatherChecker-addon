@@ -2,8 +2,8 @@ name: Build and Release NVDA Add-on
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -26,19 +28,58 @@ jobs:
         run: |
           pip install scons configobj
 
+      - name: Check version and tag existence
+        id: check_tag
+        run: |
+          VERSION=$(python -c "import buildVars; print(buildVars.addon_info['addon_version'])")
+          TAG_NAME="v$VERSION"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME"; then
+            echo "Tag $TAG_NAME already exists. Skipping release."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $TAG_NAME does not exist. Proceeding with release."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create and Push Tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.check_tag.outputs.tag_name }}
+          git push origin ${{ steps.check_tag.outputs.tag_name }}
+
       - name: Compile Add-on
+        if: steps.check_tag.outputs.exists == 'false'
         run: |
           scons
 
+      - name: Prepare Release Notes
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          if [ -f whats_new.txt ]; then
+            cat whats_new.txt > release_notes.txt
+          else
+            git log -1 --pretty=%B > release_notes.txt
+          fi
+
       - name: Get Add-on filename
         id: vars
+        if: steps.check_tag.outputs.exists == 'false'
         run: |
           filename=$(ls weatherChecker-*.nvda-addon)
           echo "filename=$filename" >> $GITHUB_OUTPUT
 
       - name: Create Release and Upload Asset
+        if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.check_tag.outputs.tag_name }}
+          name: ${{ steps.check_tag.outputs.tag_name }}
+          body_path: release_notes.txt
           files: ${{ steps.vars.outputs.filename }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

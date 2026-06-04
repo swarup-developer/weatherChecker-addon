@@ -1,0 +1,3 @@
+- Completely automated background updates: the add-on now downloads, installs, and prompts to restart NVDA directly, without opening the browser.
+- Dialog prompts now show the full "What's new" release notes before installing.
+- Pushed tag and release generation are fully automated in the CI/CD pipeline on commit/push to master.

@@ -912,21 +912,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         self.checkUpdateBtn.SetLabel(_("Check for Updates Now"))
         
         if update_available:
-            msg = _("An update is available! Version {version} is ready for download.").format(version=latest_version)
-            ui.message(msg)
-            
-            resp = gui.messageBox(
-                message=msg + "\n\n" + _("Do you want to open the download page in your browser?"),
-                caption=_("Weather Checker Update"),
-                style=wx.YES_NO | wx.ICON_INFORMATION,
-                parent=self
-            )
-            if resp == wx.YES:
-                import os
-                try:
-                    os.startfile(download_url)
-                except Exception:
-                    pass
+            weather_client.promptUpdate(latest_version, download_url, body, parent=self)
         else:
             try:
                 addon = addonHandler.getCodeAddon()

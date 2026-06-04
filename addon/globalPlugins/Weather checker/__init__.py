@@ -133,8 +133,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         try:
             update_available, latest_version, download_url, body = weather_client.checkForUpdates()
             if update_available:
-                msg = _("Weather Checker: An update is available! Version {version} is ready. Open NVDA settings to download.").format(version=latest_version)
-                wx.CallAfter(speech.speakMessage, msg)
+                wx.CallAfter(weather_client.promptUpdate, latest_version, download_url, body)
         except Exception:
             pass
 
