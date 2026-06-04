@@ -91,95 +91,97 @@ def _verifyPirateWeatherKey(key):
         return False, _("Network error: ") + str(e)
 
 
+# Bundled geocode.maps.co API key for reliable location search
+MAPS_CO_API_KEY = "6a218bad06dc3956819174ndibaa210"
+
+
+def _parse_nominatim_results(results, query):
+    """Parse Nominatim-compatible JSON (used by both Nominatim and maps.co) into a standard list."""
+    if not results:
+        raise GeocodingError(_("No locations found for: ") + query)
+    formatted = []
+    for item in results:
+        display_name = item.get("display_name", "")
+        address = item.get("address", {})
+        name = (address.get("city") or address.get("town") or address.get("village") or
+                address.get("suburb") or address.get("hamlet") or address.get("municipality") or
+                address.get("county") or display_name.split(",")[0])
+        region = address.get("state") or address.get("province") or address.get("county") or ""
+        country = address.get("country") or ""
+        formatted.append({
+            "name": name,
+            "region": region,
+            "country": country,
+            "lat": float(item.get("lat", 0)),
+            "lon": float(item.get("lon", 0))
+        })
+    return formatted
+
+
 def geocodeLocation(query, provider, openWeatherKey):
     """
     Search for location matching query.
-    If OpenWeather key is available (provider is OpenWeather or Both), use OpenWeather Geocoding API.
-    Otherwise, fall back to OpenStreetMap Nominatim API.
+    Priority:
+      1. OpenWeather Geocoding API (if OW key is available)
+      2. geocode.maps.co (keyed — reliable, no rate-limit issues)
+      3. OpenStreetMap Nominatim (last resort — may be rate-limited)
     """
     if not query or not query.strip():
         raise GeocodingError(_("Search query cannot be empty."))
-        
+
     query = query.strip()
-    
-    # Try OpenWeather Geocoding if key is available
+
+    # --- 1. OpenWeather Geocoding (if key available) ---
     if openWeatherKey and provider in (0, 2):
         url = f"https://api.openweathermap.org/geo/1.0/direct?q={requests.utils.quote(query)}&limit=10&appid={openWeatherKey}"
         try:
             resp = requests.get(url, timeout=10)
             if resp.status_code == 200:
                 results = resp.json()
-                if not results:
-                    raise GeocodingError(_("No locations found for: ") + query)
-                
-                formatted_results = []
-                for item in results:
-                    name = item.get("name", "")
-                    region = item.get("state", "")
-                    country = item.get("country", "")
-                    lat = item.get("lat")
-                    lon = item.get("lon")
-                    
-                    formatted_results.append({
-                        "name": name,
-                        "region": region,
-                        "country": country,
-                        "lat": float(lat),
-                        "lon": float(lon)
-                    })
-                return formatted_results
+                if results:
+                    return [{
+                        "name": item.get("name", ""),
+                        "region": item.get("state", ""),
+                        "country": item.get("country", ""),
+                        "lat": float(item.get("lat", 0)),
+                        "lon": float(item.get("lon", 0))
+                    } for item in results]
             elif resp.status_code == 401:
-                raise InvalidApiKeyError(_("Invalid OpenWeather key for geocoding."))
+                log.warning("OpenWeather geocoding key invalid, falling back.")
             else:
-                log.error(f"OpenWeather geocoding HTTP Error {resp.status_code}")
-        except requests.RequestException as e:
-            log.error("OpenWeather geocoding connection error, falling back to Nominatim", exc_info=True)
+                log.warning(f"OpenWeather geocoding HTTP {resp.status_code}, falling back.")
+        except Exception as e:
+            log.warning(f"OpenWeather geocoding failed: {e}, falling back.")
 
-    # Fallback/Default: OpenStreetMap Nominatim API
-    url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(query)}&format=json&limit=10&addressdetails=1"
-    headers = {
-        "User-Agent": "WeatherCheckerNVDA/1.0 (Contact: swarup.baral@example.com)"
-    }
+    # --- 2. geocode.maps.co (keyed, primary fallback) ---
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        maps_url = f"https://geocode.maps.co/search?q={requests.utils.quote(query)}&api_key={MAPS_CO_API_KEY}"
+        resp = requests.get(maps_url, timeout=10,
+                            headers={"User-Agent": "WeatherCheckerNVDA/2.0"})
         if resp.status_code == 200:
             results = resp.json()
-            if not results:
-                raise GeocodingError(_("No locations found for: ") + query)
-            
-            formatted_results = []
-            for item in results:
-                display_name = item.get("display_name", "")
-                address = item.get("address", {})
-                
-                name = (address.get("city") or 
-                        address.get("town") or 
-                        address.get("village") or 
-                        address.get("suburb") or 
-                        address.get("hamlet") or 
-                        address.get("municipality") or 
-                        address.get("county") or 
-                        display_name.split(",")[0])
-                
-                region = address.get("state") or address.get("province") or address.get("county") or ""
-                country = address.get("country") or ""
-                
-                lat = item.get("lat")
-                lon = item.get("lon")
-                
-                formatted_results.append({
-                    "name": name,
-                    "region": region,
-                    "country": country,
-                    "lat": float(lat),
-                    "lon": float(lon)
-                })
-            return formatted_results
-        elif resp.status_code == 403:
-            raise GeocodingError(_("Geocoding service rate limited or forbidden. Please try again later."))
+            if results:
+                return _parse_nominatim_results(results, query)
+            log.info("geocode.maps.co returned no results, trying Nominatim.")
+        else:
+            log.warning(f"geocode.maps.co HTTP {resp.status_code}, falling back to Nominatim.")
+    except Exception as e:
+        log.warning(f"geocode.maps.co failed: {e}, falling back to Nominatim.")
+
+    # --- 3. OpenStreetMap Nominatim (last resort) ---
+    try:
+        nom_url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(query)}&format=json&limit=10&addressdetails=1"
+        headers = {"User-Agent": "WeatherCheckerNVDA/2.0 (Contact: swarup.baral@example.com)"}
+        resp = requests.get(nom_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            return _parse_nominatim_results(resp.json(), query)
+        elif resp.status_code in (403, 429):
+            raise GeocodingError(_("All geocoding services are currently busy. Please try again in a moment."))
         else:
             raise GeocodingError(f"Nominatim HTTP Error {resp.status_code}: {resp.reason}")
-    except requests.RequestException as e:
+    except GeocodingError:
+        raise
+    except Exception as e:
         raise NetworkError(_("Network failure while geocoding: ") + str(e))
 
 
@@ -750,7 +752,7 @@ def checkForUpdates():
     Returns (update_available, latest_version, download_url, release_notes)
     """
     # Try to get the real installed version; fall back to buildVars as the source of truth
-    current_version = "2.0.6"
+    current_version = "2.0.7"
     try:
         addon = addonHandler.getCodeAddon()
         v = addon.manifest.get("version") or addon.manifest.version

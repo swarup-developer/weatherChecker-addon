@@ -1,5 +1,9 @@
+Version 2.0.7:
+- Improved: Location search now uses geocode.maps.co as a dedicated keyed geocoding service, eliminating "rate limited or forbidden" errors during manual location searches.
+- Location search priority: OpenWeather Geocoding → geocode.maps.co → Nominatim (last resort).
+
 Version 2.0.6:
 - Fixed: Update notification no longer repeats every startup after pressing No — the skipped version is remembered.
 - Fixed: Auto-detect location now tries three IP geolocation services in sequence, so a rate-limited service no longer causes a "Geocoding service rate limited" error.
 - Fixed: Version comparison now handles leading-zero version numbers (e.g. 2.0.05 vs 2.0.5) correctly, preventing false update alerts.
-- Minor: Cleaner version numbering (no leading zeros).
+
