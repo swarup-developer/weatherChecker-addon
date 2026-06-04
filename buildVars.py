@@ -1,35 +1,22 @@
-# Build customizations
-# Change this file instead of sconstruct or manifest files, whenever possible.
+import os
 
-# Full getext (please don't change)
-_ = lambda x : x
-
-# Add-on information variables
 addon_info = {
-# add-on Name
-	"addon-name" : "addon-template",
-	# Add-on description
-	# TRANSLATORS: Summary for this add-on to be shown on installation and add-on informaiton.
-	"addon-summary" : _("Add-on quick summary"),
-	# Add-on description
-	# Translators: Long description to be shown for this add-on on installation and add-on information
-	"addon-description" : _(""" description for the add-on.
-It can span multiple lines."""),
-	# version
-	"addon-version" : "x.y.z",
-	# Author(s)
-	"addon-author" : "name <name@domain.com>",
-# URL for the add-on documentation support
-"addon-url" : None
+    "addon_name": "weatherChecker",
+    "addon_version": "1.0.4",
+    "summary": "Weather Checker",
+    "description": "Provides weather conditions, forecasts, astronomy data, and weather alerts using OpenWeather and Pirate Weather APIs.",
+    "author": "Swarup Baral",
+    "url": "https://example.com/weatherChecker",
+    "license": "GPL-2",
+    "minimumNVDAVersion": "2024.1",
+    "lastTestedNVDAVersion": "2026.3",
 }
 
+pythonSources = [
+    os.path.join("addon", "globalPlugins", "*.py"),
+    os.path.join("addon", "globalPlugins", "Weather checker", "*.py")
+]
 
-import os.path
-
-# Define the python files that are the sources of your add-on.
-# You can use glob expressions here, they will be expanded.
-pythonSources = []
-
-# Files that contain strings for translation. Usually your python sources
 i18nSources = pythonSources + ["buildVars.py"]
-
+sconstructFile = "SConstruct"
+manifestFile = "manifest.ini"

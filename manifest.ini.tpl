@@ -1,6 +1,9 @@
-name = {addon-name}
-summary = "{addon-summary}"
-description = """{addon-description}"""
-author = "{addon-author}"
-url = {addon-url}
-version = {addon-version}
+name = {addon_name}
+summary = "{summary}"
+description = """{description}"""
+author = "{author}"
+url = {url}
+version = {addon_version}
+docFileName = readme.md
+minimumNVDAVersion = {minimumNVDAVersion}
+lastTestedNVDAVersion = {lastTestedNVDAVersion}

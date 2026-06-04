@@ -3,3 +3,9 @@
 *.pot
 *.nvda-addon
 .sconsign.dblite
+__pycache__/
+addon/globalPlugins/Weather checker/__pycache__/
+nvda/
+manifest.ini
+addon/manifest.ini
+addon/locale/*/manifest.ini

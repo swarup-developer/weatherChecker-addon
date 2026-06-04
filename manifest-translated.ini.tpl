@@ -1,2 +1,9 @@
+name = weatherChecker
 summary = "{addon-summary}"
 description = """{addon-description}"""
+author = "Swarup Baral"
+url = https://example.com/weatherChecker
+version = 1.0.3
+docFileName = readme.md
+minimumNVDAVersion = 2024.1
+lastTestedNVDAVersion = 2026.3
