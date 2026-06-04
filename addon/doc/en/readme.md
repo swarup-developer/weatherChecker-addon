@@ -40,8 +40,7 @@ The add-on uses standard key shortcuts that do not conflict with NVDA's built-in
     *   **Pirate Weather**: Requires a Pirate Weather API key.
     *   **All Providers**: Requires both API keys. Queries both services and aggregates results.
 4. **Configure Location**:
-    *   Click **Search for Location...** to open the modal dialog, search for your city, and select it.
-    *   Or, click **Use Current Location** to automatically set your coordinates based on your IP address.
-    *   *Note*: If no manual location is set, the add-on will automatically fall back to IP-based location detection.
+    *   Check **Automatically detect my location** to query weather based on your current IP address.
+    *   Or, uncheck it to configure a static default location: click **Search for Location...** to search for your city, or click **Use Current Location** to set it based on your current IP.
 5. Configure your preferences for **Temperature Unit** (Celsius/Fahrenheit), **Wind Speed**, **Pressure**, **Visibility**, **Automatically copy spoken weather details to clipboard**, and **Auto-Update Checks**.
 6. Press **OK** to save configurations.

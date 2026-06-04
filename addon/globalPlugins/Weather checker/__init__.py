@@ -87,34 +87,37 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def resolveLocation(self):
         """
         Resolves coordinates (latitude, longitude, display name).
-        Uses manually configured default location if present; otherwise, falls back to IP-based detection.
         """
-        lat = config_manager.getConfigVal("defaultLat")
-        lon = config_manager.getConfigVal("defaultLon")
-        name = config_manager.getConfigVal("defaultLocationName")
-        
-        if lat and lon:
+        auto_detect = config_manager.getConfigVal("autoDetectLocation")
+        if auto_detect:
+            # Check cached location
+            cached_lat = config_manager.getConfigVal("cachedLat")
+            cached_lon = config_manager.getConfigVal("cachedLon")
+            cached_name = config_manager.getConfigVal("cachedLocationName")
+            cached_time = config_manager.getConfigVal("cachedTime")
+            
+            # Cache is valid for 1 hour
+            if cached_lat and cached_lon and (time.time() - cached_time < 3600):
+                return float(cached_lat), float(cached_lon), cached_name
+                
+            # Geocode IP
+            loc = weather_client.detectLocationIP()
+            config_manager.setConfigVal("cachedLat", str(loc["lat"]))
+            config_manager.setConfigVal("cachedLon", str(loc["lon"]))
+            config_manager.setConfigVal("cachedLocationName", loc["name"])
+            config_manager.setConfigVal("cachedTime", time.time())
+            import config
+            config.conf.save()
+            return loc["lat"], loc["lon"], loc["name"]
+        else:
+            lat = config_manager.getConfigVal("defaultLat")
+            lon = config_manager.getConfigVal("defaultLon")
+            name = config_manager.getConfigVal("defaultLocationName")
+            if not lat or not lon:
+                raise weather_client.WeatherClientError(
+                    _("Location not configured. Please open NVDA Settings and configure your weather provider and location.")
+                )
             return float(lat), float(lon), name
-            
-        # Fallback: Check cached location
-        cached_lat = config_manager.getConfigVal("cachedLat")
-        cached_lon = config_manager.getConfigVal("cachedLon")
-        cached_name = config_manager.getConfigVal("cachedLocationName")
-        cached_time = config_manager.getConfigVal("cachedTime")
-        
-        # Cache is valid for 1 hour
-        if cached_lat and cached_lon and (time.time() - cached_time < 3600):
-            return float(cached_lat), float(cached_lon), cached_name
-            
-        # Geocode IP
-        loc = weather_client.detectLocationIP()
-        config_manager.setConfigVal("cachedLat", str(loc["lat"]))
-        config_manager.setConfigVal("cachedLon", str(loc["lon"]))
-        config_manager.setConfigVal("cachedLocationName", loc["name"])
-        config_manager.setConfigVal("cachedTime", time.time())
-        import config
-        config.conf.save()
-        return loc["lat"], loc["lon"], loc["name"]
 
     # ----------------------------------------------------
     # Background Startup Update Checking

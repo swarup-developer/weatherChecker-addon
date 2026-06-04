@@ -1,3 +1,3 @@
 - Added a settings panel checkbox option to automatically copy spoken weather details to the clipboard.
-- Removed the redundant automatic location checkbox option from the settings panel; location now automatically falls back to IP-based detection if no manual coordinates are set.
+- Restored and verified the automatic location detection checkbox option in the settings panel.
 - Updated shortcuts and help documentation.
