@@ -438,11 +438,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         locationBox = wx.StaticBox(self, label=_("Location Settings"))
         locationSizer = wx.StaticBoxSizer(locationBox, wx.VERTICAL)
 
-        self.autoDetectCb = wx.CheckBox(self, label=_("&Automatically detect my location"))
-        self.autoDetectCb.SetValue(config_manager.getConfigVal("autoDetectLocation"))
-        self.autoDetectCb.Bind(wx.EVT_CHECKBOX, self.onAutoDetectChanged)
-        locationSizer.Add(self.autoDetectCb, 0, wx.ALL, 5)
-
         self.currentLocationLabel = wx.StaticText(self, label="")
         self.updateLocationDisplay()
         locationSizer.Add(self.currentLocationLabel, 0, wx.ALL | wx.EXPAND, 5)
@@ -548,6 +543,10 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         self.autoUpdateCb = wx.CheckBox(self, label=_("&Check for updates automatically"))
         self.autoUpdateCb.SetValue(config_manager.getConfigVal("auto_update_check"))
         updatesSizer.Add(self.autoUpdateCb, 0, wx.ALL, 5)
+        
+        self.copyToClipboardCb = wx.CheckBox(self, label=_("Automatically &copy spoken weather details to clipboard"))
+        self.copyToClipboardCb.SetValue(config_manager.getConfigVal("copy_to_clipboard"))
+        updatesSizer.Add(self.copyToClipboardCb, 0, wx.ALL, 5)
         
         self.checkUpdateBtn = wx.Button(self, label=_("Check for &Updates Now"))
         self.checkUpdateBtn.Bind(wx.EVT_BUTTON, self.onCheckForUpdates)
@@ -726,16 +725,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         self._sendLayoutUpdatedEvent()
 
     def updateLocationFieldsVisibility(self):
-        auto_detect = self.autoDetectCb.GetValue()
-        enable_search = not auto_detect
-        
-        self.searchLocationBtn.Show(enable_search)
-        self.useCurrentLocationBtn.Show(enable_search)
-        self.favoritesLabel.Show(enable_search)
-        self.favoritesList.Show(enable_search)
-        self.addFavoriteBtn.Show(enable_search)
-        self.removeFavoriteBtn.Show(enable_search)
-        
+        # All location fields are always shown
         self.Layout()
         self._sendLayoutUpdatedEvent()
 
@@ -761,8 +751,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
     def onProviderChanged(self, event):
         self.updateProviderFieldsVisibility()
 
-    def onAutoDetectChanged(self, event):
-        self.updateLocationFieldsVisibility()
+
 
     def onVerifySettings(self, event):
         provider = self.providerChoice.GetSelection()
@@ -940,7 +929,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         provider = self.providerChoice.GetSelection()
         ow_key = self.openWeatherKeyCtrl.GetValue().strip()
         pw_key = self.pirateWeatherKeyCtrl.GetValue().strip()
-        auto_detect = self.autoDetectCb.GetValue()
         
         if provider == 0 or provider == 2:
             if not ow_key:
@@ -957,16 +945,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
                     option=_("Pirate Weather API Key")
                 )
                 return False
-
-        if not auto_detect:
-            lat = config_manager.getConfigVal("defaultLat")
-            lon = config_manager.getConfigVal("defaultLon")
-            if not lat or not lon:
-                self._validationErrorMessageBox(
-                    message=_("Location auto-detect is disabled, but no default location has been searched and saved. Please search for a location and save it."),
-                    option=_("Search for location")
-                )
-                return False
                 
         return True
 
@@ -975,7 +953,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         config_manager.setConfigVal("provider", self.providerChoice.GetSelection())
         config_manager.setConfigVal("openWeatherApiKey", self.openWeatherKeyCtrl.GetValue().strip())
         config_manager.setConfigVal("pirateWeatherApiKey", self.pirateWeatherKeyCtrl.GetValue().strip())
-        config_manager.setConfigVal("autoDetectLocation", self.autoDetectCb.GetValue())
         
         # Save Granular Units
         config_manager.setConfigVal("unit_temp", self.tempChoice.GetSelection())
@@ -985,6 +962,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         
         # Save Update options
         config_manager.setConfigVal("auto_update_check", self.autoUpdateCb.GetValue())
+        config_manager.setConfigVal("copy_to_clipboard", self.copyToClipboardCb.GetValue())
         
         # Save Favorites
         favs_str = json.dumps(self.favoriteLocations, ensure_ascii=False)

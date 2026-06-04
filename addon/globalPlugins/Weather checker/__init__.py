@@ -48,6 +48,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self._last_w_press = 0.0
         self._last_f_press = 0.0
         self._last_a_press = 0.0
+        self._last_s_press = 0.0
 
         # Start Alert Polling loop if configured
         self.startAlertChecker()
@@ -86,37 +87,34 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def resolveLocation(self):
         """
         Resolves coordinates (latitude, longitude, display name).
+        Uses manually configured default location if present; otherwise, falls back to IP-based detection.
         """
-        auto_detect = config_manager.getConfigVal("autoDetectLocation")
-        if auto_detect:
-            # Check cached location
-            cached_lat = config_manager.getConfigVal("cachedLat")
-            cached_lon = config_manager.getConfigVal("cachedLon")
-            cached_name = config_manager.getConfigVal("cachedLocationName")
-            cached_time = config_manager.getConfigVal("cachedTime")
-            
-            # Cache is valid for 1 hour
-            if cached_lat and cached_lon and (time.time() - cached_time < 3600):
-                return float(cached_lat), float(cached_lon), cached_name
-                
-            # Geocode IP
-            loc = weather_client.detectLocationIP()
-            config_manager.setConfigVal("cachedLat", str(loc["lat"]))
-            config_manager.setConfigVal("cachedLon", str(loc["lon"]))
-            config_manager.setConfigVal("cachedLocationName", loc["name"])
-            config_manager.setConfigVal("cachedTime", time.time())
-            import config
-            config.conf.save()
-            return loc["lat"], loc["lon"], loc["name"]
-        else:
-            lat = config_manager.getConfigVal("defaultLat")
-            lon = config_manager.getConfigVal("defaultLon")
-            name = config_manager.getConfigVal("defaultLocationName")
-            if not lat or not lon:
-                raise weather_client.WeatherClientError(
-                    _("Location not configured. Please open NVDA Settings and configure your weather provider and location.")
-                )
+        lat = config_manager.getConfigVal("defaultLat")
+        lon = config_manager.getConfigVal("defaultLon")
+        name = config_manager.getConfigVal("defaultLocationName")
+        
+        if lat and lon:
             return float(lat), float(lon), name
+            
+        # Fallback: Check cached location
+        cached_lat = config_manager.getConfigVal("cachedLat")
+        cached_lon = config_manager.getConfigVal("cachedLon")
+        cached_name = config_manager.getConfigVal("cachedLocationName")
+        cached_time = config_manager.getConfigVal("cachedTime")
+        
+        # Cache is valid for 1 hour
+        if cached_lat and cached_lon and (time.time() - cached_time < 3600):
+            return float(cached_lat), float(cached_lon), cached_name
+            
+        # Geocode IP
+        loc = weather_client.detectLocationIP()
+        config_manager.setConfigVal("cachedLat", str(loc["lat"]))
+        config_manager.setConfigVal("cachedLon", str(loc["lon"]))
+        config_manager.setConfigVal("cachedLocationName", loc["name"])
+        config_manager.setConfigVal("cachedTime", time.time())
+        import config
+        config.conf.save()
+        return loc["lat"], loc["lon"], loc["name"]
 
     # ----------------------------------------------------
     # Background Startup Update Checking
@@ -447,9 +445,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     # Gesture 1: Speak Current Weather
     def script_speakCurrentWeather(self, gesture):
         now = time.time()
-        if now - self._last_w_press < 0.5:  # Double press -> Copy
+        copy_pref = config_manager.getConfigVal("copy_to_clipboard")
+        if copy_pref or (now - self._last_w_press < 0.5):
             self._runAsyncWeatherAction(self._reportCurrentWeather, copy_to_clipboard=True)
-        else:  # Single press -> Speak
+        else:
             ui.message(_("Checking weather..."))
             self._runAsyncWeatherAction(self._reportCurrentWeather, copy_to_clipboard=False)
         self._last_w_press = now
@@ -540,7 +539,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     # Gesture 2: Speak Forecast
     def script_speakForecast(self, gesture):
         now = time.time()
-        if now - self._last_f_press < 0.5:
+        copy_pref = config_manager.getConfigVal("copy_to_clipboard")
+        if copy_pref or (now - self._last_f_press < 0.5):
             self._runAsyncWeatherAction(self._reportForecast, copy_to_clipboard=True)
         else:
             ui.message(_("Checking forecast..."))
@@ -650,7 +650,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     # Gesture 3: Speak Active Weather Alerts
     def script_speakActiveAlerts(self, gesture):
         now = time.time()
-        if now - self._last_a_press < 0.5:
+        copy_pref = config_manager.getConfigVal("copy_to_clipboard")
+        if copy_pref or (now - self._last_a_press < 0.5):
             self._runAsyncWeatherAction(self._reportActiveAlerts, copy_to_clipboard=True)
         else:
             ui.message(_("Checking weather alerts..."))
@@ -693,8 +694,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
     # Gesture 4: Speak Astronomy
     def script_speakAstronomy(self, gesture):
-        ui.message(_("Checking astronomy data..."))
-        self._runAsyncWeatherAction(self._reportAstronomy, copy_to_clipboard=False)
+        now = time.time()
+        copy_pref = config_manager.getConfigVal("copy_to_clipboard")
+        if copy_pref or (now - self._last_s_press < 0.5):
+            self._runAsyncWeatherAction(self._reportAstronomy, copy_to_clipboard=True)
+        else:
+            ui.message(_("Checking astronomy data..."))
+            self._runAsyncWeatherAction(self._reportAstronomy, copy_to_clipboard=False)
+        self._last_s_press = now
 
     def _reportAstronomy(self, name, weather_data, copy_to_clipboard):
         reports = []
@@ -734,7 +741,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         header = _("Astronomy data for {location}").format(location=name)
         full_msg = header + ". " + ". ".join(reports)
-        ui.message(full_msg)
+        
+        if copy_to_clipboard:
+            api.setClipData(full_msg)
+            ui.message(_("Astronomy data copied to clipboard."))
+        else:
+            ui.message(full_msg)
 
     # Gesture 5: Cycle Favorites
     def script_cycleFavoriteLocations(self, gesture):
