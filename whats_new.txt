@@ -1,3 +1,8 @@
+Version 3.3.0:
+- Improved: Made all version strings dynamic in the code, eliminating hardcoded version numbers in request headers and fallbacks.
+- Improved: Cleaned up the client source code by removing all internal inline comments.
+- Improved: Updated README documentation to include official release download links and detailed contribution guidelines.
+
 Version 3.2.0:
 - Improved: Re-implemented geocoding search to use a highly resilient chain starting with Komoot's Photon API (completely keyless, case-insensitive, fast, and structured) and falling back to OpenWeather Geocoding and Overpass QL.
 - Improved: Added local JSON caching of search results in the user's NVDA AppData directory to prevent API rate limits and speed up location queries.
