@@ -1,4 +1,4 @@
-Version 3.4.2:
+Version 4.3.2:
 - Improved: Updated the current weather report format to use a highly detailed, structured layout matching standard forecast layouts.
 - Improved: Added support for retrieving and displaying wind gusts and daily forecast summaries.
 - Improved: Integrated Air Quality Index (AQI) description and value directly into the current weather report.

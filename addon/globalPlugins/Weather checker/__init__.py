@@ -706,7 +706,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def _reportForecast(self, name, weather_data, copy_to_clipboard):
         unit_temp = config_manager.getConfigVal("unit_temp")
         forecast_type = config_manager.getConfigVal("forecast_type")
-        max_entries = config_manager.getConfigVal("forecast_entries")
         
         forecast_type_names = {
             0: _("Hourly forecast"),
@@ -727,33 +726,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             is_hourly = forecast_type in (0, 1, 2)
             
             if forecast_type == 0:
-                entries = hourly_list[:max_entries]
+                entries = hourly_list[:8]
             elif forecast_type == 1:
-                candidates = [h for h in hourly_list if h["time"] <= time.time() + 12 * 3600]
-                if not candidates:
-                    candidates = hourly_list
-                if len(candidates) <= max_entries:
-                    entries = candidates
-                else:
-                    step = len(candidates) / float(max_entries)
-                    entries = [candidates[int(i * step)] for i in range(max_entries)]
+                entries = hourly_list[:12]
             elif forecast_type == 2:
-                candidates = [h for h in hourly_list if h["time"] <= time.time() + 24 * 3600]
-                if not candidates:
-                    candidates = hourly_list
-                if len(candidates) <= max_entries:
-                    entries = candidates
-                else:
-                    step = len(candidates) / float(max_entries)
-                    entries = [candidates[int(i * step)] for i in range(max_entries)]
+                entries = hourly_list[:24]
             elif forecast_type == 3:
-                entries = daily_list[:min(max_entries, 3)]
+                entries = daily_list[:3]
             elif forecast_type == 4:
-                entries = daily_list[:min(max_entries, 5)]
+                entries = daily_list[:5]
             elif forecast_type == 5:
-                entries = daily_list[:min(max_entries, 7)]
+                entries = daily_list[:7]
             elif forecast_type == 6:
-                entries = daily_list[:min(max_entries, 10)]
+                entries = daily_list[:10]
 
             formatted_entries = []
             for item in entries:
