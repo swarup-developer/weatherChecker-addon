@@ -101,19 +101,35 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
 
     query = query.strip()
 
-    # Escape double quotes for Overpass QL
-    escaped_query = query.replace('"', '\\"')
+    # Build variants for exact match to cover common cases without regex timeouts
+    variants = [query]
+    title_q = query.title()
+    if title_q not in variants:
+        variants.append(title_q)
+    upper_q = query.upper()
+    if upper_q not in variants:
+        variants.append(upper_q)
+    lower_q = query.lower()
+    if lower_q not in variants:
+        variants.append(lower_q)
 
-    # Exact match query
+    exact_clauses = []
+    for var in variants:
+        escaped_var = var.replace('"', '\\"')
+        exact_clauses.append(f'node["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_var}"];')
+        exact_clauses.append(f'way["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_var}"];')
+        exact_clauses.append(f'relation["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_var}"];')
+
     exact_q = f"""
     [out:json][timeout:15];
     (
-      node["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_query}"];
-      way["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_query}"];
-      relation["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_query}"];
+      {"".join(exact_clauses)}
     );
     out center 20;
     """
+
+    # Escape double quotes for regex query
+    escaped_query = query.replace('"', '\\"')
 
     # Case-insensitive regex query
     regex_q = f"""

@@ -342,8 +342,9 @@ class LocationSearchDialog(wx.Dialog):
         
         for item in results:
             region_str = f", {item['region']}" if item['region'] else ""
+            country_str = f" ({item['country']})" if item['country'] else ""
             osm_type_str = f" [{item['osm_type'].capitalize()}]" if item.get('osm_type') else ""
-            display_str = f"{item['name']}{region_str} ({item['country']}){osm_type_str}"
+            display_str = f"{item['name']}{region_str}{country_str}{osm_type_str}"
             self.resultsList.Append(display_str)
             
         if results:
@@ -807,7 +808,8 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
             loc = dlg.selectedLocation
             if loc:
                 region_str = f", {loc['region']}" if loc['region'] else ""
-                full_name = f"{loc['name']}{region_str} ({loc['country']})"
+                country_str = f" ({loc['country']})" if loc['country'] else ""
+                full_name = f"{loc['name']}{region_str}{country_str}"
                 
                 config_manager.setConfigVal("defaultLat", str(loc["lat"]))
                 config_manager.setConfigVal("defaultLon", str(loc["lon"]))
@@ -827,7 +829,8 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
             loc = dlg.selectedLocation
             if loc:
                 region_str = f", {loc['region']}" if loc['region'] else ""
-                full_name = f"{loc['name']}{region_str} ({loc['country']})"
+                country_str = f" ({loc['country']})" if loc['country'] else ""
+                full_name = f"{loc['name']}{region_str}{country_str}"
                 
                 # Check if already exists in favorites
                 for fav in self.favoriteLocations:
