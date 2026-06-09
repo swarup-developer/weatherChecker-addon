@@ -15,19 +15,23 @@ Weather Checker is a highly accessible NVDA add-on that provides up-to-date weat
 
 ---
 
-## Keyboard Shortcuts (Non-Reserved Keys)
+## Keyboard Shortcuts
 
-The add-on uses standard key shortcuts that do not conflict with NVDA's built-in reserved keys. 
+By default, only one keyboard shortcut is assigned to prevent conflicts with NVDA's built-in keys and other add-ons:
 
-*   **`NVDA + Shift + W`**: Speaks the current weather.
+*   **`NVDA + Shift + W`**: Speaks the current weather conditions.
     *   *Double Press*: Copies the detailed current weather text to the clipboard.
-*   **`NVDA + Shift + F`**: Speaks the weather forecast.
-    *   *Double Press*: Copies the detailed forecast text to the clipboard.
-*   **`NVDA + Shift + A`**: Speaks active weather alerts/warnings for your set location.
-    *   *Double Press*: Copies the alert details to the clipboard.
-*   **`NVDA + Shift + S`**: Speaks astronomy details (sunrise, sunset, moon phase).
-    *   *Double Press*: Copies the astronomy details to the clipboard.
-*   **`NVDA + Shift + L`**: Cycles through your configured favorite locations.
+
+### Customizing Gestures (All Other Functions)
+All other features do not have a default keyboard shortcut assigned. You can freely assign your preferred shortcuts by going to:
+**NVDA Menu** -> **Preferences** -> **Input Gestures** -> **Weather Checker** category.
+
+From there, you can bind shortcuts for:
+- Speaking the weather forecast (Double press to copy)
+- Speaking active weather alerts/warnings (Double press to copy)
+- Speaking astronomy details (sunrise, sunset, moon phase) (Double press to copy)
+- Cycling through your configured favorite locations
+- Opening the Weather Checker Settings panel
 
 ---
 
