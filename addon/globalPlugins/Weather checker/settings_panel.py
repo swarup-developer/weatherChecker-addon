@@ -294,11 +294,14 @@ class LocationSearchDialog(wx.Dialog):
         self.okBtn = self.FindWindowById(wx.ID_OK)
         if self.okBtn:
             self.okBtn.Disable()
+            self.okBtn.SetDefault()
             
         self.Bind(wx.EVT_BUTTON, self.onOK, id=wx.ID_OK)
         
         self.searchTimer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.onSearchTimerTrigger, self.searchTimer)
+        
+        self.searchCtrl.SetFocus()
         
         self.SetSizerAndFit(mainSizer)
         self.CentreOnParent()
@@ -454,11 +457,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         
         self.searchLocationBtn = wx.Button(self, label=_("&Search for Location..."))
         self.searchLocationBtn.Bind(wx.EVT_BUTTON, self.onSearchLocationClick)
-        locationBtnSizer.Add(self.searchLocationBtn, 0, wx.RIGHT, 5)
-        
-        self.useCurrentLocationBtn = wx.Button(self, label=_("Use Current &Location"))
-        self.useCurrentLocationBtn.Bind(wx.EVT_BUTTON, self.onUseCurrentLocationClick)
-        locationBtnSizer.Add(self.useCurrentLocationBtn, 0)
+        locationBtnSizer.Add(self.searchLocationBtn, 0)
 
         # Favorites list Box
         self.favoritesLabel = wx.StaticText(self, label=_("&Favorite Locations:"))
@@ -733,7 +732,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         enable_search = not auto_detect
         
         self.searchLocationBtn.Show(enable_search)
-        self.useCurrentLocationBtn.Show(enable_search)
         self.favoritesLabel.Show(enable_search)
         self.favoritesList.Show(enable_search)
         self.addFavoriteBtn.Show(enable_search)
@@ -849,41 +847,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
                 ui.message(_("Added to favorites: {name}").format(name=full_name))
         dlg.Destroy()
 
-    def onUseCurrentLocationClick(self, event):
-        self.useCurrentLocationBtn.Disable()
-        self.useCurrentLocationBtn.SetLabel(_("Detecting..."))
-        
-        def run_detect():
-            try:
-                loc = weather_client.detectLocationIP()
-                wx.CallAfter(self.onDetectSuccess, loc)
-            except Exception as e:
-                wx.CallAfter(self.onDetectFailed, str(e))
-                
-        t = threading.Thread(target=run_detect)
-        t.daemon = True
-        t.start()
-
-    def onDetectSuccess(self, loc):
-        self.useCurrentLocationBtn.Enable()
-        self.useCurrentLocationBtn.SetLabel(_("Use Current &Location"))
-        
-        full_name = f"{loc['name']} ({loc['country']})" if loc.get("country") else loc['name']
-        
-        config_manager.setConfigVal("defaultLat", str(loc["lat"]))
-        config_manager.setConfigVal("defaultLon", str(loc["lon"]))
-        config_manager.setConfigVal("defaultLocationName", full_name)
-        
-        self.updateLocationDisplay()
-        msg = _("Location set to {name}").format(name=full_name)
-        ui.message(msg)
-        speech.speakMessage(msg)
-
-    def onDetectFailed(self, error_msg):
-        self.useCurrentLocationBtn.Enable()
-        self.useCurrentLocationBtn.SetLabel(_("Use Current &Location"))
-        ui.message(error_msg)
-        gui.messageBox(error_msg, _("Location Detection Failed"), wx.OK | wx.ICON_ERROR, parent=self)
+    # IP-based location auto-detection was removed at user request
 
     def onFavoriteSelected(self, event):
         self.removeFavoriteBtn.Enable()
