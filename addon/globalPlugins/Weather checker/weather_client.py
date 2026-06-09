@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# Weather Client for Weather Checker NVDA add-on
 
 import requests
 import time
@@ -30,22 +29,21 @@ class GeocodingError(WeatherClientError):
     """Raised when geocoding fails or returns no results."""
     pass
 
-
 def verifyKeys(provider, openWeatherKey, pirateWeatherKey):
     """
     Validate the configured provider keys.
     Returns (success, message).
     """
     try:
-        if provider == 0:  # OpenWeather
+        if provider == 0:
             if not openWeatherKey:
                 return False, _("OpenWeather API key cannot be empty.")
             return _verifyOpenWeatherKey(openWeatherKey)
-        elif provider == 1:  # Pirate Weather
+        elif provider == 1:
             if not pirateWeatherKey:
                 return False, _("Pirate Weather API key cannot be empty.")
             return _verifyPirateWeatherKey(pirateWeatherKey)
-        elif provider == 2:  # Both
+        elif provider == 2:
             if not openWeatherKey or not pirateWeatherKey:
                 return False, _("Both API keys are required and cannot be empty.")
             ow_ok, ow_msg = _verifyOpenWeatherKey(openWeatherKey)
@@ -59,7 +57,6 @@ def verifyKeys(provider, openWeatherKey, pirateWeatherKey):
     except Exception as e:
         log.error("Exception in verifyKeys: ", exc_info=True)
         return False, str(e)
-
 
 def _verifyOpenWeatherKey(key):
     """Verify OpenWeather API key using current weather API at Lat=0, Lon=0."""
@@ -75,7 +72,6 @@ def _verifyOpenWeatherKey(key):
     except requests.RequestException as e:
         return False, _("Network error: ") + str(e)
 
-
 def _verifyPirateWeatherKey(key):
     """Verify Pirate Weather API key using forecast API at Lat=0, Lon=0."""
     url = f"https://api.pirateweather.net/forecast/{key}/0,0"
@@ -90,7 +86,6 @@ def _verifyPirateWeatherKey(key):
     except requests.RequestException as e:
         return False, _("Network error: ") + str(e)
 
-
 def _geocodePhoton(query):
     import urllib.parse
     url = f"https://photon.komoot.io/api/?q={urllib.parse.quote(query)}&limit=15"
@@ -101,7 +96,7 @@ def _geocodePhoton(query):
     resp = requests.get(url, headers=headers, timeout=10)
     if resp.status_code != 200:
         raise GeocodingError(f"Photon API returned status {resp.status_code}")
-    
+
     features = resp.json().get("features", [])
     results = []
     for feat in features:
@@ -110,17 +105,17 @@ def _geocodePhoton(query):
         coords = geom.get("coordinates", [])
         if len(coords) < 2:
             continue
-        
+
         name = props.get("name")
         if not name:
             continue
-            
+
         region = props.get("state") or props.get("county") or ""
         country = props.get("country") or ""
         lat = float(coords[1])
         lon = float(coords[0])
         osm_value = props.get("osm_value") or props.get("osm_key") or "node"
-        
+
         results.append({
             "name": name,
             "region": region,
@@ -131,7 +126,6 @@ def _geocodePhoton(query):
         })
     return results
 
-
 def _geocodeOpenWeather(query, key):
     import urllib.parse
     url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(query)}&limit=15&appid={key}"
@@ -141,22 +135,22 @@ def _geocodeOpenWeather(query, key):
     resp = requests.get(url, headers=headers, timeout=10)
     if resp.status_code != 200:
         raise GeocodingError(f"OpenWeather Geocoding returned status {resp.status_code}")
-        
+
     elements = resp.json()
     if not isinstance(elements, list):
         return []
-        
+
     results = []
     for item in elements:
         name = item.get("name")
         if not name:
             continue
-            
+
         region = item.get("state") or ""
         country = item.get("country") or ""
         lat = float(item.get("lat", 0.0))
         lon = float(item.get("lon", 0.0))
-        
+
         results.append({
             "name": name,
             "region": region,
@@ -167,9 +161,8 @@ def _geocodeOpenWeather(query, key):
         })
     return results
 
-
 def _geocodeOverpass(query):
-    # Escape double quotes for Overpass QL
+
     variants = [query]
     title_q = query.title()
     if title_q not in variants:
@@ -196,10 +189,8 @@ def _geocodeOverpass(query):
     out center 20;
     """
 
-    # Escape double quotes for regex query
     escaped_query = query.replace('"', '\\"')
 
-    # Case-insensitive regex query
     regex_q = f"""
     [out:json][timeout:25];
     (
@@ -281,7 +272,7 @@ def _geocodeOverpass(query):
         name = tags.get("name") or tags.get("name:en") or tags.get("official_name") or ""
         if not name:
             continue
-            
+
         region = (
             tags.get("addr:state") or 
             tags.get("is_in:state") or 
@@ -290,7 +281,7 @@ def _geocodeOverpass(query):
             tags.get("addr:province") or 
             ""
         )
-        
+
         country = (
             tags.get("addr:country") or 
             tags.get("is_in:country") or 
@@ -298,7 +289,7 @@ def _geocodeOverpass(query):
             tags.get("addr:country_code") or 
             ""
         )
-        
+
         is_in_str = tags.get("is_in") or tags.get("is_in:short")
         if is_in_str and (not region or not country):
             parts = [p.strip() for p in is_in_str.split(",") if p.strip()]
@@ -331,7 +322,6 @@ def _geocodeOverpass(query):
         })
     return results
 
-
 def getSearchCacheFilePath():
     import os
     try:
@@ -341,7 +331,6 @@ def getSearchCacheFilePath():
         import tempfile
         config_dir = tempfile.gettempdir()
     return os.path.join(config_dir, "weather_checker_search_cache.json")
-
 
 def _loadSearchCache():
     import json
@@ -355,7 +344,6 @@ def _loadSearchCache():
     except Exception:
         return {}
 
-
 def _saveSearchCache(cache):
     import json
     path = getSearchCacheFilePath()
@@ -364,7 +352,6 @@ def _saveSearchCache(cache):
             json.dump(cache, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
-
 
 def geocodeLocation(query, provider=None, openWeatherKey=None):
     """
@@ -380,7 +367,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
     query = query.strip()
     cache_key = query.lower()
 
-    # Load cache and check if we already have results
     cache = _loadSearchCache()
     if cache_key in cache:
         return cache[cache_key]
@@ -388,14 +374,12 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
     errors = []
     results = []
 
-    # 1. Try Photon Geocoding (Primary keyless geocoder)
     try:
         results = _geocodePhoton(query)
     except Exception as e:
         log.warning(f"Photon geocoding failed: {e}")
         errors.append(f"Photon: {e}")
 
-    # 2. Try OpenWeather Geocoding (Secondary geocoder using user's key)
     if not results and openWeatherKey and openWeatherKey.strip():
         try:
             results = _geocodeOpenWeather(query, openWeatherKey.strip())
@@ -403,7 +387,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             log.warning(f"OpenWeather geocoding failed: {e}")
             errors.append(f"OpenWeather: {e}")
 
-    # 3. Try Overpass API (Tertiary fallback)
     if not results:
         try:
             results = _geocodeOverpass(query)
@@ -418,7 +401,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
         else:
             raise GeocodingError(_("No locations found for: ") + query)
 
-    # Prioritization ranking sorting
     def get_rank_key(item):
         name_lower = item["name"].lower()
         query_lower = query.lower()
@@ -432,7 +414,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
 
     results.sort(key=get_rank_key)
 
-    # De-duplicate results
     seen = set()
     unique_formatted = []
     for r in results:
@@ -444,12 +425,10 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
     if not unique_formatted:
         raise GeocodingError(_("No locations found for: ") + query)
 
-    # Save to cache
     cache[cache_key] = unique_formatted
     _saveSearchCache(cache)
 
     return unique_formatted
-
 
 def detectLocationIP():
     """
@@ -459,7 +438,6 @@ def detectLocationIP():
     """
     last_error = None
 
-    # --- Service 1: ipwho.is ---
     try:
         resp = requests.get("https://ipwho.is/", timeout=10)
         if resp.status_code == 200:
@@ -479,7 +457,6 @@ def detectLocationIP():
         last_error = e
         log.warning(f"ipwho.is failed: {e}, trying fallback.")
 
-    # --- Service 2: ip-api.com (free tier, no key needed) ---
     try:
         resp = requests.get("http://ip-api.com/json/?fields=status,city,regionName,country,lat,lon", timeout=10)
         if resp.status_code == 200:
@@ -499,7 +476,6 @@ def detectLocationIP():
         last_error = e
         log.warning(f"ip-api.com failed: {e}, trying fallback.")
 
-    # --- Service 3: ipapi.co ---
     try:
         resp = requests.get("https://ipapi.co/json/", timeout=10,
                             headers={"User-Agent": f"WeatherCheckerNVDA/{_get_installed_version()}"})
@@ -552,7 +528,6 @@ def _fetchOpenMeteoAQI(lat, lon):
         log.warning(f"Failed to query Open-Meteo AQI: {e}")
     return None
 
-
 def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
     """
     Fetch all weather data for lat, lon coordinates.
@@ -565,7 +540,6 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
     want_open_weather = (provider == 0 or provider == 2)
     want_pirate_weather = (provider == 1 or provider == 2)
 
-    # 1. Fetch OpenWeather
     if want_open_weather and openWeatherKey:
         try:
             ow_data = _fetchOpenWeather(lat, lon, openWeatherKey)
@@ -573,7 +547,7 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
         except Exception as e:
             errors.append(f"OpenWeather: {str(e)}")
             log.error("Failed fetching OpenWeather", exc_info=True)
-            
+
             if provider == 0 and pirateWeatherKey:
                 log.info("OpenWeather failed. Attempting failover to Pirate Weather.")
                 try:
@@ -582,7 +556,6 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
                 except Exception as ex:
                     errors.append(f"Pirate Weather (Failover): {str(ex)}")
 
-    # 2. Fetch Pirate Weather
     if want_pirate_weather and pirateWeatherKey:
         if "Pirate Weather" not in results:
             try:
@@ -591,7 +564,7 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
             except Exception as e:
                 errors.append(f"Pirate Weather: {str(e)}")
                 log.error("Failed fetching Pirate Weather", exc_info=True)
-                
+
                 if provider == 1 and openWeatherKey and "OpenWeather" not in results:
                     log.info("Pirate Weather failed. Attempting failover to OpenWeather.")
                     try:
@@ -604,7 +577,6 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
         error_msg = "; ".join(errors)
         raise WeatherClientError(_("Weather request failed: ") + error_msg)
 
-    # Fallback to Open-Meteo AQI if any provider is missing AQI data
     om_aqi_value = None
     om_aqi_fetched = False
     for prov_name, prov_data in results.items():
@@ -621,12 +593,10 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
 
     return results
 
-
 def _fetchOpenWeather(lat, lon, key):
     data = None
     one_call_success = False
 
-    # Attempt One Call 3.0 first
     try:
         url = f"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={key}&units=metric"
         resp = requests.get(url, timeout=10)
@@ -640,7 +610,6 @@ def _fetchOpenWeather(lat, lon, key):
     except Exception as e:
         log.error("OpenWeather 3.0 One Call exception: ", exc_info=True)
 
-    # Attempt One Call 2.5
     if not one_call_success:
         try:
             url = f"https://api.openweathermap.org/data/2.5/onecall?lat={lat}&lon={lon}&appid={key}&units=metric"
@@ -661,7 +630,7 @@ def _fetchOpenWeather(lat, lon, key):
         current = data.get("current", {})
         weather_list = current.get("weather", [])
         condition = weather_list[0].get("description", "") if weather_list else ""
-        
+
         normalized["current"] = {
             "condition": condition.capitalize(),
             "temp": current.get("temp"),
@@ -676,7 +645,7 @@ def _fetchOpenWeather(lat, lon, key):
             "dew_point": current.get("dew_point"),
             "aqi": None
         }
-        
+
         daily_list = data.get("daily", [])
         today_astro = daily_list[0] if daily_list else {}
         normalized["astronomy"] = {
@@ -686,7 +655,7 @@ def _fetchOpenWeather(lat, lon, key):
             "moonset": today_astro.get("moonset"),
             "moon_phase": today_astro.get("moon_phase")
         }
-        
+
         hourly_forecasts = []
         for h in data.get("hourly", []):
             h_weather = h.get("weather", [])
@@ -698,7 +667,7 @@ def _fetchOpenWeather(lat, lon, key):
                 "condition": h_cond.capitalize()
             })
         normalized["hourly"] = hourly_forecasts
-        
+
         daily_forecasts = []
         for d in daily_list:
             d_weather = d.get("weather", [])
@@ -714,7 +683,7 @@ def _fetchOpenWeather(lat, lon, key):
                 "moon_phase": d.get("moon_phase")
             })
         normalized["daily"] = daily_forecasts
-        
+
         alerts = []
         for alert in data.get("alerts", []):
             alerts.append({
@@ -725,12 +694,12 @@ def _fetchOpenWeather(lat, lon, key):
                 "end": alert.get("end")
             })
         normalized["alerts"] = alerts
-        
+
     else:
-        # Fallback to Current 2.5 + Forecast 2.5
+
         current_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={key}&units=metric"
         forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={key}&units=metric"
-        
+
         try:
             curr_resp = requests.get(current_url, timeout=10)
             if curr_resp.status_code == 401:
@@ -739,22 +708,21 @@ def _fetchOpenWeather(lat, lon, key):
             curr_data = curr_resp.json()
         except requests.RequestException as e:
             raise NetworkError(_("OpenWeather connection failed: ") + str(e))
-            
+
         try:
             fore_resp = requests.get(forecast_url, timeout=10)
             fore_resp.raise_for_status()
             fore_data = fore_resp.json()
         except requests.RequestException as e:
             raise NetworkError(_("OpenWeather forecast connection failed: ") + str(e))
-            
+
         weather_list = curr_data.get("weather", [])
         condition = weather_list[0].get("description", "") if weather_list else ""
         main_data = curr_data.get("main", {})
         wind_data = curr_data.get("wind", {})
         clouds_data = curr_data.get("clouds", {})
         sys_data = curr_data.get("sys", {})
-        
-        # Compute dew point using Magnus-Tetens formula if temperature and humidity are available
+
         calculated_dew_point = None
         temp = main_data.get("temp")
         humidity = main_data.get("humidity")
@@ -768,7 +736,6 @@ def _fetchOpenWeather(lat, lon, key):
             except Exception:
                 pass
 
-        # Attempt to query UV Index from the free 2.5 endpoint
         fetched_uvi = None
         try:
             uvi_url = f"https://api.openweathermap.org/data/2.5/uvi?lat={lat}&lon={lon}&appid={key}"
@@ -792,7 +759,7 @@ def _fetchOpenWeather(lat, lon, key):
             "dew_point": calculated_dew_point,
             "aqi": None
         }
-        
+
         normalized["astronomy"] = {
             "sunrise": sys_data.get("sunrise"),
             "sunset": sys_data.get("sunset"),
@@ -800,10 +767,10 @@ def _fetchOpenWeather(lat, lon, key):
             "moonset": None,
             "moon_phase": None
         }
-        
+
         hourly_forecasts = []
         forecast_list = fore_data.get("list", [])
-        
+
         for item in forecast_list:
             item_weather = item.get("weather", [])
             item_cond = item_weather[0].get("description", "") if item_weather else ""
@@ -815,7 +782,7 @@ def _fetchOpenWeather(lat, lon, key):
                 "condition": item_cond.capitalize()
             })
         normalized["hourly"] = hourly_forecasts
-        
+
         daily_groups = {}
         for item in forecast_list:
             dt = item.get("dt")
@@ -823,7 +790,7 @@ def _fetchOpenWeather(lat, lon, key):
             if dt_date not in daily_groups:
                 daily_groups[dt_date] = []
             daily_groups[dt_date].append(item)
-            
+
         daily_forecasts = []
         sorted_dates = sorted(daily_groups.keys())
         for d_date in sorted_dates:
@@ -831,17 +798,17 @@ def _fetchOpenWeather(lat, lon, key):
             temps = [it.get("main", {}).get("temp") for it in items if it.get("main", {}).get("temp") is not None]
             min_temp = min(temps) if temps else None
             max_temp = max(temps) if temps else None
-            
+
             rep_item = items[0]
             for it in items:
                 dt_time = datetime.datetime.fromtimestamp(it.get("dt")).time()
                 if 11 <= dt_time.hour <= 14:
                     rep_item = it
                     break
-            
+
             rep_weather = rep_item.get("weather", [])
             rep_cond = rep_weather[0].get("description", "") if rep_weather else ""
-            
+
             daily_forecasts.append({
                 "time": int(time.mktime(datetime.datetime.combine(d_date, datetime.time(12, 0)).timetuple())),
                 "temp_min": min_temp,
@@ -854,7 +821,6 @@ def _fetchOpenWeather(lat, lon, key):
         normalized["daily"] = daily_forecasts
         normalized["alerts"] = []
 
-    # Query Air Quality
     try:
         pollution_url = f"https://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={key}"
         poll_resp = requests.get(pollution_url, timeout=10)
@@ -875,7 +841,6 @@ def _fetchOpenWeather(lat, lon, key):
         log.error("Failed to query Air Pollution API", exc_info=True)
 
     return normalized
-
 
 def _fetchPirateWeather(lat, lon, key):
     url = f"https://api.pirateweather.net/forecast/{key}/{lat},{lon}?units=si"
@@ -952,10 +917,6 @@ def _fetchPirateWeather(lat, lon, key):
 
     return normalized
 
-
-# ----------------------------------------------------
-# Granular Unit Conversions
-# ----------------------------------------------------
 def convertTemp(val_c, unit):
     """
     Convert Celsius to selected temperature unit.
@@ -974,9 +935,9 @@ def convertWindSpeed(val_ms, unit):
     """
     if val_ms is None:
         return None
-    if unit == 1: # km/h
+    if unit == 1:
         return val_ms * 3.6
-    elif unit == 2: # mph
+    elif unit == 2:
         return val_ms * 2.23694
     return val_ms
 
@@ -987,7 +948,7 @@ def convertPressure(val_hpa, unit):
     """
     if val_hpa is None:
         return None
-    if unit == 1: # inHg
+    if unit == 1:
         return val_hpa * 0.02953
     return val_hpa
 
@@ -998,10 +959,9 @@ def convertVisibility(val_km, unit):
     """
     if val_km is None:
         return None
-    if unit == 1: # Miles
+    if unit == 1:
         return val_km * 0.621371
     return val_km
-
 
 def getWindDirectionName(degrees):
     """Convert wind direction angle in degrees to a text description."""
@@ -1016,12 +976,11 @@ def getWindDirectionName(degrees):
     idx = int((degrees + 11.25) / 22.5) % 16
     return directions[idx]
 
-
 def getMoonPhaseName(phase):
     """Convert moon phase (0 to 1 value) to text description."""
     if phase is None:
         return _("Unknown")
-    
+
     if phase < 0.01 or phase > 0.99:
         return _("New Moon")
     elif phase < 0.24:
@@ -1039,7 +998,6 @@ def getMoonPhaseName(phase):
     else:
         return _("Waning Crescent")
 
-
 def formatTimestamp(ts):
     """Convert a unix timestamp to a formatted time string in local time."""
     if not ts:
@@ -1049,7 +1007,6 @@ def formatTimestamp(ts):
         return dt.strftime("%I:%M %p")
     except Exception:
         return _("N/A")
-
 
 def formatDay(ts):
     """Convert unix timestamp to day of the week."""
@@ -1061,15 +1018,8 @@ def formatDay(ts):
     except Exception:
         return ""
 
-
-# ----------------------------------------------------
-# GitHub-based Add-on Version Checker
-# ----------------------------------------------------
-
-# Module-level session state — resets every time NVDA starts (never persisted)
-_update_session_dismissed = set()   # versions user said "No" to this session
-_update_check_scheduled = False     # guard: only one startup check per session
-
+_update_session_dismissed = set()
+_update_check_scheduled = False
 
 def _normalize_version(v):
     """
@@ -1085,7 +1035,6 @@ def _normalize_version(v):
             parts.append(0)
     return parts
 
-
 def _versions_equal(a, b):
     """Return True if two version strings represent the same version."""
     va = _normalize_version(a)
@@ -1094,7 +1043,6 @@ def _versions_equal(a, b):
     va += [0] * (max_len - len(va))
     vb += [0] * (max_len - len(vb))
     return va == vb
-
 
 def _version_is_newer(candidate, current):
     """Return True if candidate version is strictly newer than current."""
@@ -1105,24 +1053,22 @@ def _version_is_newer(candidate, current):
     vn += [0] * (max_len - len(vn))
     return vc > vn
 
-
 def _get_installed_version():
     """
     Read the currently installed add-on version.
     Tries addonHandler first; falls back to checking buildVars dynamically
     or parsing the manifest.ini file directly.
     """
-    # 1. Try NVDA's addonHandler
+
     try:
         addon = addonHandler.getCodeAddon()
-        # manifest behaves like a dict — use subscript access, not attribute
+
         v = addon.manifest["version"]
         if v and str(v).strip():
             return str(v).strip()
     except Exception:
         pass
 
-    # 2. Try importing buildVars (useful during SCons build or local tests)
     try:
         import buildVars
         v = buildVars.addon_info.get("addon_version")
@@ -1131,13 +1077,12 @@ def _get_installed_version():
     except Exception:
         pass
 
-    # 3. Try reading manifest.ini relative to this file
     try:
         import os
         base_dir = os.path.dirname(os.path.abspath(__file__))
         possible_paths = [
-            os.path.join(base_dir, "..", "..", "manifest.ini"), # installed layout: globalPlugins/Weather checker/ -> root
-            os.path.join(base_dir, "..", "..", "..", "addon", "manifest.ini"), # source layout
+            os.path.join(base_dir, "..", "..", "manifest.ini"),
+            os.path.join(base_dir, "..", "..", "..", "addon", "manifest.ini"),
             os.path.join(base_dir, "..", "..", "..", "manifest.ini"),
         ]
         for path in possible_paths:
@@ -1153,7 +1098,6 @@ def _get_installed_version():
     except Exception:
         pass
 
-    # 4. Try reading buildVars.py directly
     try:
         import os
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1168,9 +1112,7 @@ def _get_installed_version():
     except Exception:
         pass
 
-    # Last resort fallback if somehow everything else fails
     return "0.0.0"
-
 
 def checkForUpdates():
     """
@@ -1205,12 +1147,12 @@ def checkForUpdates():
         ) + str(e))
 
     if resp.status_code == 404:
-        # No releases published on this repository yet
+
         log.info("Update check: no releases found (404).")
         return False, current_version, "", ""
 
     if resp.status_code == 403:
-        # GitHub API rate limit
+
         raise WeatherClientError(_(
             "Update check was rate-limited by GitHub. Please try again later."
         ))
@@ -1227,21 +1169,19 @@ def checkForUpdates():
             "Update server returned an invalid response. Please try again later."
         ))
 
-    # Extract tag — strip leading 'v' for clean comparison
     tag_raw = data.get("tag_name", "").strip()
     if not tag_raw:
         log.warning("Update check: release has no tag_name.")
         return False, current_version, "", ""
     latest_version = tag_raw.lstrip("v")
 
-    # Find the .nvda-addon asset download URL
     download_url = ""
     for asset in data.get("assets", []):
         if asset.get("name", "").endswith(".nvda-addon"):
             download_url = asset.get("browser_download_url", "")
             break
     if not download_url:
-        # Fall back to the HTML release page so the user can download manually
+
         download_url = data.get("html_url",
                                 "https://github.com/swarup-developer/weatherChecker-addon/releases")
 
@@ -1255,7 +1195,6 @@ def checkForUpdates():
     )
     return update_available, latest_version, download_url, release_notes
 
-
 def _save_update_state(key, value):
     """Safely persist an update tracking value to NVDA config."""
     try:
@@ -1265,7 +1204,6 @@ def _save_update_state(key, value):
     except Exception as e:
         log.warning(f"Could not save update state [{key}]: {e}")
 
-
 def _read_update_state(key, default=""):
     """Safely read an update tracking value from NVDA config."""
     try:
@@ -1274,7 +1212,6 @@ def _read_update_state(key, default=""):
         return val if val is not None else default
     except Exception:
         return default
-
 
 def promptUpdate(latest_version, download_url, release_notes, parent=None, force=False):
     """
@@ -1294,25 +1231,22 @@ def promptUpdate(latest_version, download_url, release_notes, parent=None, force
     lv = latest_version.strip().lstrip("v")
 
     if not force:
-        # Rule 1 — user already installed this version (persisted across restarts)
+
         last_installed = _read_update_state("lastUpdatedVersion")
         if last_installed and _versions_equal(last_installed, lv):
             log.info(f"Update prompt suppressed: v{lv} already installed.")
             return
 
-        # Rule 2 — user said No this session (in-memory, resets on NVDA restart)
         if lv in _update_session_dismissed:
             log.info(f"Update prompt suppressed: user dismissed v{lv} this session.")
             return
 
-    # Use mainFrame as fallback parent so the dialog always has a valid owner
     if parent is None:
         try:
             parent = _gui.mainFrame
         except Exception:
             parent = None
 
-    # Show the update dialog
     try:
         dlg = UpdatePromptDialog(parent, lv, release_notes)
         result = dlg.ShowModal()
@@ -1323,18 +1257,17 @@ def promptUpdate(latest_version, download_url, release_notes, parent=None, force
 
     if result == wx.ID_YES:
         _save_update_state("lastOfferedVersion", lv)
-        # Remove from dismissed set so re-prompt works after install
+
         _update_session_dismissed.discard(lv)
         downloadAndInstallUpdate(lv, download_url)
     else:
-        # Declined — remember for this session only
+
         _update_session_dismissed.add(lv)
         log.info(
             f"User declined update to v{lv}. "
             "Will not prompt again this session. "
             "Will re-offer after NVDA restart."
         )
-
 
 def downloadAndInstallUpdate(latest_version, download_url):
     """
@@ -1388,7 +1321,6 @@ def downloadAndInstallUpdate(latest_version, download_url):
                     bundle = _ah.AddonBundle(temp_path)
                     bundle_name = bundle.manifest["name"]
 
-                    # Mark existing version for removal before installing new one
                     for existing in list(_ah.getAvailableAddons()):
                         if existing.manifest["name"] == bundle_name:
                             log.info(
@@ -1399,27 +1331,22 @@ def downloadAndInstallUpdate(latest_version, download_url):
                             break
 
                     installed = _ah.installAddonBundle(bundle)
-                    # installAddonBundle schedules install for next NVDA restart.
-                    # It returns the addon reference on success; None means the
-                    # bundle was rejected (e.g. incompatible NVDA version).
+
                     if installed is None:
                         raise RuntimeError(
                             "The add-on bundle was rejected by NVDA "
                             "(possibly incompatible with your NVDA version)."
                         )
 
-                    # Persist the installed version — suppresses future prompts
                     _save_update_state("lastUpdatedVersion", latest_version)
                     _save_update_state("lastOfferedVersion", latest_version)
 
-                    # Clean up temp file
                     try:
                         os.remove(temp_path)
                         temp_path = None
                     except OSError:
                         pass
 
-                    # Offer restart
                     restart_msg = _(
                         "Weather Checker has been updated to version {ver}. "
                         "You must restart NVDA for the changes to take effect. "
@@ -1470,7 +1397,6 @@ def downloadAndInstallUpdate(latest_version, download_url):
     t = threading.Thread(target=_run, name="WCUpdateDownload", daemon=True)
     t.start()
 
-
 class UpdatePromptDialog(wx.Dialog):
     """
     Accessible dialog shown when a newer version is available.
@@ -1492,7 +1418,6 @@ class UpdatePromptDialog(wx.Dialog):
         import wx
         sizer = wx.BoxSizer(wx.VERTICAL)
 
-        # Main message — matches spec exactly
         msg = _(
             "A new version of Weather Checker is available (version {ver}). "
             "Would you like to update now?"
@@ -1501,7 +1426,6 @@ class UpdatePromptDialog(wx.Dialog):
         info.Wrap(440)
         sizer.Add(info, 0, wx.ALL | wx.EXPAND, 12)
 
-        # Release notes (optional)
         if self.release_notes and self.release_notes.strip():
             notes_label = wx.StaticText(self, label=_("What's new:"))
             sizer.Add(notes_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 12)
@@ -1516,7 +1440,6 @@ class UpdatePromptDialog(wx.Dialog):
         btn_sizer = self.CreateButtonSizer(wx.YES | wx.NO)
         sizer.Add(btn_sizer, 0, wx.ALL | wx.ALIGN_RIGHT, 12)
 
-        # Accessible: focus the YES button so screen readers announce it first
         yes_btn = self.FindWindowById(wx.ID_YES)
         if yes_btn:
             yes_btn.SetFocus()

@@ -44,3 +44,32 @@ The add-on uses standard key shortcuts that do not conflict with NVDA's built-in
     *   Or, uncheck it to configure a static default location: click **Search for Location...** to search for your city, or click **Use Current Location** to set it based on your current IP.
 5. Configure your preferences for **Temperature Unit** (Celsius/Fahrenheit), **Wind Speed**, **Pressure**, **Visibility**, **Automatically copy spoken weather details to clipboard**, and **Auto-Update Checks**.
 6. Press **OK** to save configurations.
+
+---
+
+## Download & Repository
+
+The official source code, repository, and release packages are hosted on GitHub:
+* **GitHub Repository**: [swarup-developer/weatherChecker-addon](https://github.com/swarup-developer/weatherChecker-addon)
+* **Latest Release Download**: [Download .nvda-addon](https://github.com/swarup-developer/weatherChecker-addon/releases/latest)
+
+---
+
+## Contributions
+
+Contributions are welcome! If you want to contribute, please follow these guidelines:
+
+### Contribution Guidelines
+1. **Reporting Issues**: If you encounter bugs or want to request features, please open an issue on the [GitHub Issues](https://github.com/swarup-developer/weatherChecker-addon/issues) page.
+2. **Submitting Pull Requests**:
+   - Fork the repository and create your branch from `main`.
+   - Implement your changes, keeping the code clean and properly structured.
+   - Commit your changes with clear, descriptive commit messages.
+   - Submit a Pull Request describing your changes.
+3. **Code Quality**:
+   - Write clean, readable code.
+   - Test your changes locally before submitting.
+4. **Local Building & Testing**:
+   - Run `scons` in the root directory to build the `.nvda-addon` package.
+   - Install the generated package in NVDA to verify your changes.
+
