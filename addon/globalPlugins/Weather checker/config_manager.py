@@ -50,7 +50,7 @@ confspec_dict = {
         "info_uvIndex": "boolean(default=true)",
         "info_clouds": "boolean(default=true)",
         "info_dewPoint": "boolean(default=true)",
-        "info_airQuality": "boolean(default=true)",
+        "info_airQuality": "boolean(default=false)",
         
         # Forecast Settings
         "forecast_type": "integer(default=3)",             # 0: Hourly, 1: 12-hour, 2: 24-hour, 3: Daily, 4: 7-day, 5: 10-day
