@@ -76,4 +76,3 @@ Contributions are welcome! If you want to contribute, please follow these guidel
 4. **Local Building & Testing**:
    - Run `scons` in the root directory to build the `.nvda-addon` package.
    - Install the generated package in NVDA to verify your changes.
-
