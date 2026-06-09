@@ -742,6 +742,51 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
 
     def onAutoDetectChanged(self, event):
         self.updateLocationFieldsVisibility()
+        if self.autoDetectCb.GetValue():
+            self.autoDetectCb.Disable()
+            ui.message(_("Detecting location..."))
+            
+            def run_detect():
+                try:
+                    loc = weather_client.detectLocationIP()
+                    wx.CallAfter(self.onAutoDetectSuccess, loc)
+                except Exception as e:
+                    wx.CallAfter(self.onAutoDetectFailed, str(e))
+                    
+            t = threading.Thread(target=run_detect)
+            t.daemon = True
+            t.start()
+
+    def onAutoDetectSuccess(self, loc):
+        self.autoDetectCb.Enable()
+        
+        full_name = f"{loc['name']} ({loc['country']})" if loc.get("country") else loc['name']
+        
+        config_manager.setConfigVal("defaultLat", str(loc["lat"]))
+        config_manager.setConfigVal("defaultLon", str(loc["lon"]))
+        config_manager.setConfigVal("defaultLocationName", full_name)
+        
+        # Also cache it so resolveLocation uses it immediately without re-querying
+        config_manager.setConfigVal("cachedLat", str(loc["lat"]))
+        config_manager.setConfigVal("cachedLon", str(loc["lon"]))
+        config_manager.setConfigVal("cachedLocationName", full_name)
+        config_manager.setConfigVal("cachedTime", time.time())
+        
+        import config
+        config.conf.save()
+        
+        self.updateLocationDisplay()
+        msg = _("Location auto-detected: {name}").format(name=full_name)
+        ui.message(msg)
+        speech.speakMessage(msg)
+
+    def onAutoDetectFailed(self, error_msg):
+        self.autoDetectCb.Enable()
+        self.autoDetectCb.SetValue(False)
+        self.updateLocationFieldsVisibility()
+        
+        ui.message(error_msg)
+        gui.messageBox(error_msg, _("Auto-Detection Failed"), wx.OK | wx.ICON_ERROR, parent=self)
 
     def updateLocationDisplay(self):
         lat = config_manager.getConfigVal("defaultLat")
