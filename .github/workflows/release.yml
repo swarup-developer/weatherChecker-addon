@@ -59,30 +59,32 @@ jobs:
 
       - name: Prepare Release Notes
         if: steps.check_tag.outputs.exists == 'false'
+        shell: python
         run: |
-          if [ -f whats_new.txt ]; then
-            python -c '
-import re
-with open("whats_new.txt", "r", encoding="utf-8") as f:
-    content = f.read()
-lines = content.splitlines()
-extracted = []
-found = False
-version_pattern = re.compile(r"^(?:#+\s*)?Version\s+\d+(?:\.\d+)*.*:", re.IGNORECASE)
-for line in lines:
-    if version_pattern.match(line.strip()):
-        if found:
-            break
-        found = True
-        extracted.append(line)
-    elif found:
-        extracted.append(line)
-with open("release_notes.txt", "w", encoding="utf-8") as f:
-    f.write("\n".join(extracted).strip())
-'
+          import os
+          import subprocess
+          import re
+          if os.path.exists("whats_new.txt"):
+              with open("whats_new.txt", "r", encoding="utf-8") as f:
+                  content = f.read()
+              lines = content.splitlines()
+              extracted = []
+              found = False
+              version_pattern = re.compile(r"^(?:#+\s*)?Version\s+\d+(?:\.\d+)*.*:", re.IGNORECASE)
+              for line in lines:
+                  if version_pattern.match(line.strip()):
+                      if found:
+                          break
+                      found = True
+                      extracted.append(line)
+                  elif found:
+                      extracted.append(line)
+              with open("release_notes.txt", "w", encoding="utf-8") as f:
+                  f.write("\n".join(extracted).strip())
           else:
-            git log -1 --pretty=%B > release_notes.txt
-          fi
+              result = subprocess.run(["git", "log", "-1", "--pretty=%B"], capture_output=True, text=True)
+              with open("release_notes.txt", "w", encoding="utf-8") as f:
+                  f.write(result.stdout.strip())
 
       - name: Get Add-on filename
         id: vars
