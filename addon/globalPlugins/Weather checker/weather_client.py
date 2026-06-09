@@ -95,7 +95,7 @@ def _geocodePhoton(query):
     import urllib.parse
     url = f"https://photon.komoot.io/api/?q={urllib.parse.quote(query)}&limit=15"
     headers = {
-        "User-Agent": "WeatherCheckerNVDA/3.2.0 (contact: swarupbaral102@gmail.com)",
+        "User-Agent": f"WeatherCheckerNVDA/{_get_installed_version()} (contact: swarupbaral102@gmail.com)",
         "Accept": "application/json"
     }
     resp = requests.get(url, headers=headers, timeout=10)
@@ -136,7 +136,7 @@ def _geocodeOpenWeather(query, key):
     import urllib.parse
     url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(query)}&limit=15&appid={key}"
     headers = {
-        "User-Agent": "WeatherCheckerNVDA/3.2.0 (contact: swarupbaral102@gmail.com)"
+        "User-Agent": f"WeatherCheckerNVDA/{_get_installed_version()} (contact: swarupbaral102@gmail.com)"
     }
     resp = requests.get(url, headers=headers, timeout=10)
     if resp.status_code != 200:
@@ -211,7 +211,7 @@ def _geocodeOverpass(query):
     """
 
     headers = {
-        "User-Agent": "WeatherCheckerNVDA/3.2.0 (contact: swarupbaral102@gmail.com)",
+        "User-Agent": f"WeatherCheckerNVDA/{_get_installed_version()} (contact: swarupbaral102@gmail.com)",
         "Accept": "application/json"
     }
 
@@ -502,7 +502,7 @@ def detectLocationIP():
     # --- Service 3: ipapi.co ---
     try:
         resp = requests.get("https://ipapi.co/json/", timeout=10,
-                            headers={"User-Agent": "WeatherCheckerNVDA/2.0"})
+                            headers={"User-Agent": f"WeatherCheckerNVDA/{_get_installed_version()}"})
         if resp.status_code == 200:
             data = resp.json()
             lat = data.get("latitude")
@@ -1109,8 +1109,10 @@ def _version_is_newer(candidate, current):
 def _get_installed_version():
     """
     Read the currently installed add-on version.
-    Tries addonHandler first; falls back to the buildVars constant.
+    Tries addonHandler first; falls back to checking buildVars dynamically
+    or parsing the manifest.ini file directly.
     """
+    # 1. Try NVDA's addonHandler
     try:
         addon = addonHandler.getCodeAddon()
         # manifest behaves like a dict — use subscript access, not attribute
@@ -1119,8 +1121,55 @@ def _get_installed_version():
             return str(v).strip()
     except Exception:
         pass
-    # Hard-coded fallback that always matches current buildVars
-    return "3.2.0"
+
+    # 2. Try importing buildVars (useful during SCons build or local tests)
+    try:
+        import buildVars
+        v = buildVars.addon_info.get("addon_version")
+        if v and str(v).strip():
+            return str(v).strip()
+    except Exception:
+        pass
+
+    # 3. Try reading manifest.ini relative to this file
+    try:
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths = [
+            os.path.join(base_dir, "..", "..", "manifest.ini"), # installed layout: globalPlugins/Weather checker/ -> root
+            os.path.join(base_dir, "..", "..", "..", "addon", "manifest.ini"), # source layout
+            os.path.join(base_dir, "..", "..", "..", "manifest.ini"),
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("version"):
+                            parts = line.split("=", 1)
+                            if len(parts) == 2:
+                                v = parts[1].strip().strip('"').strip("'")
+                                if v:
+                                    return v
+    except Exception:
+        pass
+
+    # 4. Try reading buildVars.py directly
+    try:
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        buildvars_path = os.path.join(base_dir, "..", "..", "..", "buildVars.py")
+        if os.path.exists(buildvars_path):
+            with open(buildvars_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                import re
+                match = re.search(r'"addon_version"\s*:\s*"([^"]+)"', content)
+                if match:
+                    return match.group(1)
+    except Exception:
+        pass
+
+    # Last resort fallback if somehow everything else fails
+    return "0.0.0"
 
 
 def checkForUpdates():
@@ -1138,7 +1187,7 @@ def checkForUpdates():
     current_version = _get_installed_version()
 
     api_url = "https://api.github.com/repos/swarup-developer/weatherChecker-addon/releases/latest"
-    headers = {"User-Agent": "WeatherCheckerNVDA/2.0 (weatherchecker-addon update check)"}
+    headers = {"User-Agent": f"WeatherCheckerNVDA/{current_version} (weatherchecker-addon update check)"}
 
     try:
         resp = requests.get(api_url, headers=headers, timeout=15)
@@ -1311,8 +1360,9 @@ def downloadAndInstallUpdate(latest_version, download_url):
 
         temp_path = None
         try:
+            current_version = _get_installed_version()
             dl_headers = {
-                "User-Agent": "WeatherCheckerNVDA/2.0 (addon update download)"
+                "User-Agent": f"WeatherCheckerNVDA/{current_version} (addon update download)"
             }
             dl_resp = _requests.get(
                 download_url, headers=dl_headers, stream=True, timeout=60
