@@ -384,6 +384,35 @@ def detectLocationIP():
         _("Could not auto-detect location. All IP geolocation services are unavailable. Please set your location manually in settings.")
     )
 
+def _fetchOpenMeteoAQI(lat, lon):
+    """
+    Fetch US Air Quality Index (AQI) from Open-Meteo keyless API.
+    Returns formatted string category or None.
+    """
+    url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            curr_data = data.get("current", {})
+            aqi_val = curr_data.get("us_aqi")
+            if aqi_val is not None:
+                if aqi_val <= 50:
+                    return _("Good") + f" ({aqi_val})"
+                elif aqi_val <= 100:
+                    return _("Moderate") + f" ({aqi_val})"
+                elif aqi_val <= 150:
+                    return _("Unhealthy for Sensitive Groups") + f" ({aqi_val})"
+                elif aqi_val <= 200:
+                    return _("Unhealthy") + f" ({aqi_val})"
+                elif aqi_val <= 300:
+                    return _("Very Unhealthy") + f" ({aqi_val})"
+                else:
+                    return _("Hazardous") + f" ({aqi_val})"
+    except Exception as e:
+        log.warning(f"Failed to query Open-Meteo AQI: {e}")
+    return None
+
 
 def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
     """
@@ -435,6 +464,21 @@ def fetchWeatherData(lat, lon, provider, openWeatherKey, pirateWeatherKey):
     if not results:
         error_msg = "; ".join(errors)
         raise WeatherClientError(_("Weather request failed: ") + error_msg)
+
+    # Fallback to Open-Meteo AQI if any provider is missing AQI data
+    om_aqi_value = None
+    om_aqi_fetched = False
+    for prov_name, prov_data in results.items():
+        curr = prov_data.get("current", {})
+        if curr and curr.get("aqi") is None:
+            if not om_aqi_fetched:
+                try:
+                    om_aqi_value = _fetchOpenMeteoAQI(lat, lon)
+                except Exception as e:
+                    log.warning(f"Open-Meteo AQI fallback query failed: {e}")
+                om_aqi_fetched = True
+            if om_aqi_value:
+                curr["aqi"] = om_aqi_value
 
     return results
 
