@@ -21,7 +21,7 @@ addonHandler.initTranslation()
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     """
     Weather Checker NVDA Add-on.
-    Only NVDA+Shift+W is assigned by default. All other commands can be
+    Only NVDA+Alt+W is assigned by default. All other commands can be
     assigned freely via NVDA Menu > Preferences > Input Gestures > Weather Checker.
     """
 
@@ -30,7 +30,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
     # Only the primary gesture is hardcoded — all others are user-configurable
     __gestures = {
-        "kb:NVDA+shift+w": "speakCurrentWeather",
+        "kb:NVDA+alt+w": "speakCurrentWeather",
     }
 
     # Class-level flag: ensures the startup update check fires exactly once per session
@@ -478,7 +478,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         except Exception as e:
             wx.CallAfter(ui.message, _("Weather Checker connection failed. Please check network and API key settings."))
 
-    # Script 1: Speak Current Weather (NVDA+Shift+W by default)
+    # Script 1: Speak Current Weather (NVDA+Alt+W by default)
     def script_speakCurrentWeather(self, gesture):
         """Report current weather conditions for the configured location. Press twice quickly to copy to clipboard."""
         now = time.time()

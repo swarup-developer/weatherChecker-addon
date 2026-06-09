@@ -6,6 +6,7 @@ Version 3.4.2:
 - Improved: Added a custom ignored alerts filter in settings, allowing users to define keyword blocklists to suppress noisy or non-critical weather alerts.
 - Improved: Added smart filtering to the automatic update checker to only display release notes for the latest version instead of the entire version history.
 - Change: Removed the "Maximum entries to announce" setting (Alt+m) from the settings panel as forecast queries now automatically retrieve the full length of the selected forecast type.
+- Change: Changed the default hotkey to speak current weather from NVDA+Shift+W to NVDA+Alt+W to avoid conflicts with system monitoring or other add-ons.
 
 Version 3.4.0:
 - Improved: Configured the automatic startup update check to trigger even on the first run of the add-on.
