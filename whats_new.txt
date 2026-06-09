@@ -1,3 +1,13 @@
+Version 3.1.0:
+- Improved: Replaced legacy geocoding services (geocode.maps.co, OpenWeather Geocoding, Nominatim) with Overpass API using HTTP POST.
+- Improved: Added multi-mirror failover support for Overpass API mirrors to handle server load and timeouts seamlessly.
+- Improved: Optimized location searches with fast exact-match queries, failing over to case-insensitive regex searches only when needed.
+- Improved: Display the OSM object type (e.g. [Node], [Way], [Relation]) next to location search results in settings.
+- Improved: Added automatic Dew Point calculation using the Magnus-Tetens formula in OpenWeather 2.5 fallback mode.
+- Improved: Added fallback UV Index API queries using the free /2.5/uvi OpenWeather endpoint.
+- Improved: Smart warning suppression under "All Providers" to only issue provider-unavailable warnings if both API keys are configured and one fails.
+- Fixed: Unchecked checkboxes are strictly respected and corresponding weather details are completely omitted from reports.
+
 Version 2.0.8 — Final Release:
 - Fixed: Update notification now shows exactly once per NVDA session when a newer version exists.
 - Fixed: Pressing No on the update dialog suppresses the prompt for the rest of the session only (resets on next NVDA restart so you'll be notified again if still not updated).

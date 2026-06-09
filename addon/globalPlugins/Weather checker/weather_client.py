@@ -91,98 +91,209 @@ def _verifyPirateWeatherKey(key):
         return False, _("Network error: ") + str(e)
 
 
-# Bundled geocode.maps.co API key for reliable location search
-MAPS_CO_API_KEY = "6a218bad06dc3956819174ndibaa210"
-
-
-def _parse_nominatim_results(results, query):
-    """Parse Nominatim-compatible JSON (used by both Nominatim and maps.co) into a standard list."""
-    if not results:
-        raise GeocodingError(_("No locations found for: ") + query)
-    formatted = []
-    for item in results:
-        display_name = item.get("display_name", "")
-        address = item.get("address", {})
-        name = (address.get("city") or address.get("town") or address.get("village") or
-                address.get("suburb") or address.get("hamlet") or address.get("municipality") or
-                address.get("county") or display_name.split(",")[0])
-        region = address.get("state") or address.get("province") or address.get("county") or ""
-        country = address.get("country") or ""
-        formatted.append({
-            "name": name,
-            "region": region,
-            "country": country,
-            "lat": float(item.get("lat", 0)),
-            "lon": float(item.get("lon", 0))
-        })
-    return formatted
-
-
-def geocodeLocation(query, provider, openWeatherKey):
+def geocodeLocation(query, provider=None, openWeatherKey=None):
     """
-    Search for location matching query.
-    Priority:
-      1. OpenWeather Geocoding API (if OW key is available)
-      2. geocode.maps.co (keyed — reliable, no rate-limit issues)
-      3. OpenStreetMap Nominatim (last resort — may be rate-limited)
+    Search for location matching query using OpenStreetMap Overpass API.
+    Iterates through multiple global public mirrors for failover.
     """
     if not query or not query.strip():
         raise GeocodingError(_("Search query cannot be empty."))
 
     query = query.strip()
 
-    # --- 1. OpenWeather Geocoding (if key available) ---
-    if openWeatherKey and provider in (0, 2):
-        url = f"https://api.openweathermap.org/geo/1.0/direct?q={requests.utils.quote(query)}&limit=10&appid={openWeatherKey}"
+    # Escape double quotes for Overpass QL
+    escaped_query = query.replace('"', '\\"')
+
+    # Exact match query
+    exact_q = f"""
+    [out:json][timeout:15];
+    (
+      node["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_query}"];
+      way["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_query}"];
+      relation["place"~"city|town|village|hamlet|suburb|municipality"]["name"="{escaped_query}"];
+    );
+    out center 20;
+    """
+
+    # Case-insensitive regex query
+    regex_q = f"""
+    [out:json][timeout:25];
+    (
+      node["place"~"city|town|village|hamlet|suburb|municipality"]["name"~"{escaped_query}",i];
+      way["place"~"city|town|village|hamlet|suburb|municipality"]["name"~"{escaped_query}",i];
+      relation["place"~"city|town|village|hamlet|suburb|municipality"]["name"~"{escaped_query}",i];
+    );
+    out center 20;
+    """
+
+    headers = {
+        "User-Agent": "WeatherCheckerNVDA/3.1.0 (contact: swarupbaral102@gmail.com)",
+        "Accept": "application/json"
+    }
+
+    endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://z.overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter"
+    ]
+
+    results = []
+    last_error_msg = ""
+    is_rate_limited = False
+    is_timeout = False
+
+    for url in endpoints:
+        results = []
         try:
-            resp = requests.get(url, timeout=10)
+            # 1. Try exact match query
+            resp = requests.post(
+                url,
+                data=exact_q.encode('utf-8'),
+                headers=headers,
+                timeout=12
+            )
             if resp.status_code == 200:
-                results = resp.json()
-                if results:
-                    return [{
-                        "name": item.get("name", ""),
-                        "region": item.get("state", ""),
-                        "country": item.get("country", ""),
-                        "lat": float(item.get("lat", 0)),
-                        "lon": float(item.get("lon", 0))
-                    } for item in results]
-            elif resp.status_code == 401:
-                log.warning("OpenWeather geocoding key invalid, falling back.")
+                results = resp.json().get("elements", [])
+                
+                # If exact query succeeded but returned 0 elements, try regex fallback on the same server
+                if not results:
+                    resp_reg = requests.post(
+                        url,
+                        data=regex_q.encode('utf-8'),
+                        headers=headers,
+                        timeout=20
+                    )
+                    if resp_reg.status_code == 200:
+                        results = resp_reg.json().get("elements", [])
+                    elif resp_reg.status_code == 429:
+                        log.warning(f"Overpass mirror {url} regex query rate-limited.")
+                        is_rate_limited = True
+                        continue
+                    else:
+                        log.warning(f"Overpass mirror {url} regex query returned HTTP {resp_reg.status_code}.")
+                        continue
+            elif resp.status_code == 429:
+                log.warning(f"Overpass mirror {url} exact query rate-limited.")
+                is_rate_limited = True
+                continue
             else:
-                log.warning(f"OpenWeather geocoding HTTP {resp.status_code}, falling back.")
+                log.warning(f"Overpass mirror {url} exact query returned HTTP {resp.status_code}.")
+                continue
+                
+        except requests.exceptions.Timeout:
+            log.warning(f"Overpass mirror {url} request timed out.")
+            is_timeout = True
+            continue
         except Exception as e:
-            log.warning(f"OpenWeather geocoding failed: {e}, falling back.")
+            log.warning(f"Overpass mirror {url} request failed: {e}")
+            last_error_msg = str(e)
+            continue
 
-    # --- 2. geocode.maps.co (keyed, primary fallback) ---
-    try:
-        maps_url = f"https://geocode.maps.co/search?q={requests.utils.quote(query)}&api_key={MAPS_CO_API_KEY}"
-        resp = requests.get(maps_url, timeout=10,
-                            headers={"User-Agent": "WeatherCheckerNVDA/2.0"})
-        if resp.status_code == 200:
-            results = resp.json()
-            if results:
-                return _parse_nominatim_results(results, query)
-            log.info("geocode.maps.co returned no results, trying Nominatim.")
-        else:
-            log.warning(f"geocode.maps.co HTTP {resp.status_code}, falling back to Nominatim.")
-    except Exception as e:
-        log.warning(f"geocode.maps.co failed: {e}, falling back to Nominatim.")
+        # If we successfully completed queries on a server, break the endpoint loop
+        # (even if results list is empty, it means we got a valid 200 from the server)
+        break
 
-    # --- 3. OpenStreetMap Nominatim (last resort) ---
-    try:
-        nom_url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(query)}&format=json&limit=10&addressdetails=1"
-        headers = {"User-Agent": "WeatherCheckerNVDA/2.0 (Contact: swarup.baral@example.com)"}
-        resp = requests.get(nom_url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            return _parse_nominatim_results(resp.json(), query)
-        elif resp.status_code in (403, 429):
-            raise GeocodingError(_("All geocoding services are currently busy. Please try again in a moment."))
+    if not results:
+        if is_rate_limited:
+            raise GeocodingError(_("All Overpass servers are currently busy. Please try again in a moment."))
+        elif is_timeout:
+            raise NetworkError(_("Location search timed out. Please try again."))
+        elif last_error_msg:
+            raise NetworkError(_("Network failure while searching location: ") + last_error_msg)
         else:
-            raise GeocodingError(f"Nominatim HTTP Error {resp.status_code}: {resp.reason}")
-    except GeocodingError:
-        raise
-    except Exception as e:
-        raise NetworkError(_("Network failure while geocoding: ") + str(e))
+            raise GeocodingError(_("No locations found for: ") + query)
+
+    # Parse and format the elements
+    formatted = []
+    for item in results:
+        tags = item.get("tags", {})
+        
+        # Extract name
+        name = tags.get("name") or tags.get("name:en") or tags.get("official_name") or ""
+        if not name:
+            continue
+            
+        # Extract region/state
+        region = (
+            tags.get("addr:state") or 
+            tags.get("is_in:state") or 
+            tags.get("is_in:province") or 
+            tags.get("is_in:region") or 
+            tags.get("addr:province") or 
+            ""
+        )
+        
+        # Extract country
+        country = (
+            tags.get("addr:country") or 
+            tags.get("is_in:country") or 
+            tags.get("is_in:country_code") or 
+            tags.get("addr:country_code") or 
+            ""
+        )
+        
+        # Parse is_in string as fallback hierarchy
+        is_in_str = tags.get("is_in") or tags.get("is_in:short")
+        if is_in_str and (not region or not country):
+            parts = [p.strip() for p in is_in_str.split(",") if p.strip()]
+            if len(parts) >= 2:
+                if not country:
+                    country = parts[-1]
+                if not region:
+                    region = parts[-2]
+            elif len(parts) == 1 and not country:
+                country = parts[0]
+
+        # Extract coordinates
+        lat = 0.0
+        lon = 0.0
+        if item.get("type") == "node":
+            lat = float(item.get("lat", 0.0))
+            lon = float(item.get("lon", 0.0))
+        elif "center" in item:
+            lat = float(item["center"].get("lat", 0.0))
+            lon = float(item["center"].get("lon", 0.0))
+        else:
+            # Skip if no coordinates available
+            continue
+
+        formatted.append({
+            "name": name,
+            "region": region,
+            "country": country,
+            "lat": lat,
+            "lon": lon,
+            "osm_type": item.get("type", "")
+        })
+
+    # Prioritization ranking sorting: exact name match first (case sensitive), then case insensitive, then prefix, then substring
+    def get_rank_key(item):
+        name_lower = item["name"].lower()
+        query_lower = query.lower()
+        if item["name"] == query:
+            return 0
+        elif name_lower == query_lower:
+            return 1
+        elif name_lower.startswith(query_lower):
+            return 2
+        return 3
+
+    formatted.sort(key=get_rank_key)
+
+    # De-duplicate results
+    seen = set()
+    unique_formatted = []
+    for r in formatted:
+        key = (r["name"].lower(), r["region"].lower(), r["country"].lower())
+        if key not in seen:
+            seen.add(key)
+            unique_formatted.append(r)
+
+    if not unique_formatted:
+        raise GeocodingError(_("No locations found for: ") + query)
+
+    return unique_formatted
 
 
 def detectLocationIP():
@@ -444,18 +555,42 @@ def _fetchOpenWeather(lat, lon, key):
         clouds_data = curr_data.get("clouds", {})
         sys_data = curr_data.get("sys", {})
         
+        # Compute dew point using Magnus-Tetens formula if temperature and humidity are available
+        calculated_dew_point = None
+        temp = main_data.get("temp")
+        humidity = main_data.get("humidity")
+        if temp is not None and humidity is not None:
+            try:
+                import math
+                a = 17.27
+                b = 237.7
+                alpha = ((a * temp) / (b + temp)) + math.log(humidity / 100.0)
+                calculated_dew_point = (b * alpha) / (a - alpha)
+            except Exception:
+                pass
+
+        # Attempt to query UV Index from the free 2.5 endpoint
+        fetched_uvi = None
+        try:
+            uvi_url = f"https://api.openweathermap.org/data/2.5/uvi?lat={lat}&lon={lon}&appid={key}"
+            uvi_resp = requests.get(uvi_url, timeout=10)
+            if uvi_resp.status_code == 200:
+                fetched_uvi = uvi_resp.json().get("value")
+        except Exception as e:
+            log.warning(f"Failed to query OpenWeather 2.5 UV Index API: {e}")
+
         normalized["current"] = {
             "condition": condition.capitalize(),
-            "temp": main_data.get("temp"),
+            "temp": temp,
             "feels_like": main_data.get("feels_like"),
-            "humidity": main_data.get("humidity"),
+            "humidity": humidity,
             "wind_speed": wind_data.get("speed"),
             "wind_dir": wind_data.get("deg"),
             "pressure": main_data.get("pressure"),
             "visibility": curr_data.get("visibility", 10000) / 1000.0,
-            "uvi": None,
+            "uvi": fetched_uvi,
             "clouds": clouds_data.get("all"),
-            "dew_point": None,
+            "dew_point": calculated_dew_point,
             "aqi": None
         }
         
@@ -786,7 +921,7 @@ def _get_installed_version():
     except Exception:
         pass
     # Hard-coded fallback that always matches current buildVars
-    return "3.0.1"
+    return "3.1.0"
 
 
 def checkForUpdates():

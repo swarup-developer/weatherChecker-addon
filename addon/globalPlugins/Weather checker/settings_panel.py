@@ -342,7 +342,8 @@ class LocationSearchDialog(wx.Dialog):
         
         for item in results:
             region_str = f", {item['region']}" if item['region'] else ""
-            display_str = f"{item['name']}{region_str} ({item['country']})"
+            osm_type_str = f" [{item['osm_type'].capitalize()}]" if item.get('osm_type') else ""
+            display_str = f"{item['name']}{region_str} ({item['country']}){osm_type_str}"
             self.resultsList.Append(display_str)
             
         if results:

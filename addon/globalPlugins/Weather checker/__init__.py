@@ -442,12 +442,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 has_ow = "OpenWeather" in weather_data
                 has_pw = "Pirate Weather" in weather_data
                 
-                if has_ow and has_pw:
-                    weather_data = self.mergeWeatherData(weather_data)
-                elif has_pw and not has_ow:
-                    warning = _("OpenWeather is currently unavailable. Using Pirate Weather.")
-                elif has_ow and not has_pw:
-                    warning = _("Pirate Weather is currently unavailable. Using OpenWeather.")
+                ow_configured = bool(ow_key and ow_key.strip())
+                pw_configured = bool(pw_key and pw_key.strip())
+                
+                if ow_configured and pw_configured:
+                    if has_ow and has_pw:
+                        weather_data = self.mergeWeatherData(weather_data)
+                    elif has_pw and not has_ow:
+                        warning = _("OpenWeather is currently unavailable. Using Pirate Weather.")
+                    elif has_ow and not has_pw:
+                        warning = _("Pirate Weather is currently unavailable. Using OpenWeather.")
+                else:
+                    # If only one provider is configured, no warning is issued and the single source data is presented.
+                    pass
             
             # Log to weather history!
             config_manager.addHistoryEntry(location_name, weather_data, lat, lon)
