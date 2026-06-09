@@ -261,6 +261,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def _matchesAlertCategories(self, title, desc):
         text = (title + " " + desc).lower()
         
+        ignored = config_manager.getConfigVal("alert_ignoredKeywords")
+        if ignored:
+            keywords = [k.strip().lower() for k in ignored.split(",") if k.strip()]
+            if any(kw in text for kw in keywords):
+                return False
+        
         mapping = {
             "alert_thunderstorm": ["thunderstorm", "lightning", "squall"],
             "alert_heavyRain": ["rain", "precipitation", "shower", "downpour"],
@@ -337,6 +343,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             "feels_like": avg(ow_curr.get("feels_like"), pw_curr.get("feels_like")),
             "humidity": avg(ow_curr.get("humidity"), pw_curr.get("humidity")),
             "wind_speed": avg(ow_curr.get("wind_speed"), pw_curr.get("wind_speed")),
+            "wind_gust": avg(ow_curr.get("wind_gust"), pw_curr.get("wind_gust")),
             "wind_dir": avg(ow_curr.get("wind_dir"), pw_curr.get("wind_dir")),
             "pressure": avg(ow_curr.get("pressure"), pw_curr.get("pressure")),
             "visibility": avg(ow_curr.get("visibility"), pw_curr.get("visibility")),
@@ -394,6 +401,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                     "temp_min": avg(o_item.get("temp_min"), p_item.get("temp_min")),
                     "temp_max": avg(o_item.get("temp_max"), p_item.get("temp_max")),
                     "condition": combine_cond(o_item.get("condition"), p_item.get("condition")),
+                    "summary": o_item.get("summary") or p_item.get("summary") or "",
                     "sunrise": o_item.get("sunrise") or p_item.get("sunrise"),
                     "sunset": o_item.get("sunset") or p_item.get("sunset"),
                     "moon_phase": avg(o_item.get("moon_phase"), p_item.get("moon_phase"))
@@ -483,81 +491,199 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self._last_w_press = now
 
     def _reportCurrentWeather(self, name, weather_data, copy_to_clipboard):
-        unit_temp = config_manager.getConfigVal("unit_temp")
-        unit_wind = config_manager.getConfigVal("unit_wind")
-        unit_pressure = config_manager.getConfigVal("unit_pressure")
-        unit_visibility = config_manager.getConfigVal("unit_visibility")
-        
+        import datetime
         reports = []
         
         for prov, data in weather_data.items():
             curr = data.get("current", {})
-            parts = []
+            hourly_list = data.get("hourly", [])
+            daily_list = data.get("daily", [])
             
-            if config_manager.getConfigVal("info_currentWeather") and curr.get("condition"):
-                parts.append(_("Conditions: {cond}").format(cond=curr["condition"]))
+            lines = []
+            
+            # Date and Time Period
+            dt = datetime.datetime.now()
+            day_str = dt.strftime("%A, %B ") + str(dt.day) + dt.strftime(", %Y")
+            hour = dt.hour
+            if 5 <= hour < 12:
+                period = _("this morning")
+            elif 12 <= hour < 17:
+                period = _("this afternoon")
+            elif 17 <= hour < 21:
+                period = _("this evening")
+            else:
+                period = _("tonight")
                 
-            if config_manager.getConfigVal("info_temperature") and curr.get("temp") is not None:
-                temp_val = weather_client.convertTemp(curr["temp"], unit_temp)
-                deg = "°F" if unit_temp == 1 else "°C"
-                parts.append(_("Temperature: {temp:.1f}{deg}").format(temp=temp_val, deg=deg))
-                    
-            if config_manager.getConfigVal("info_feelsLike") and curr.get("feels_like") is not None:
-                feels_val = weather_client.convertTemp(curr["feels_like"], unit_temp)
-                deg = "°F" if unit_temp == 1 else "°C"
-                parts.append(_("Feels like: {feels:.1f}{deg}").format(feels=feels_val, deg=deg))
-                    
-            if config_manager.getConfigVal("info_humidity") and curr.get("humidity") is not None:
-                parts.append(_("Humidity: {humidity}%").format(humidity=curr["humidity"]))
+            lines.append(_("Here is the current weather report for {location} {period}, {day_str}.").format(
+                location=name, period=period, day_str=day_str
+            ))
+            lines.append(_("Current Weather Report: {location}").format(location=name))
+            lines.append(_("Current Conditions"))
+            
+            # Temperature
+            temp_c_raw = curr.get("temp")
+            if temp_c_raw is not None:
+                temp_c = int(round(temp_c_raw))
+                temp_f = int(round((temp_c_raw * 9/5) + 32))
+            else:
+                temp_c, temp_f = 0, 32
+            lines.append(_("Temperature: Around {temp_c}°C ({temp_f}°F)").format(temp_c=temp_c, temp_f=temp_f))
+            
+            # RealFeel
+            feels_raw = curr.get("feels_like")
+            if feels_raw is not None:
+                feels_c = int(round(feels_raw))
+                feels_f = int(round((feels_raw * 9/5) + 32))
+            else:
+                feels_c, feels_f = temp_c, temp_f
+            lines.append(_("RealFeel: {feels_c}°C ({feels_f}°F)").format(feels_c=feels_c, feels_f=feels_f))
+            
+            # Condition
+            condition = curr.get("condition") or _("Unknown")
+            lines.append(_("Condition: {condition}").format(condition=condition))
+            
+            # Wind speed, direction, gust
+            wind_speed = curr.get("wind_speed") # m/s
+            wind_dir = curr.get("wind_dir")
+            wind_gust = curr.get("wind_gust") # m/s
+            
+            if wind_speed is not None:
+                speed_kmh = int(round(wind_speed * 3.6))
+                speed_mph = int(round(wind_speed * 2.23694))
+            else:
+                speed_kmh, speed_mph = 0, 0
                 
-            if config_manager.getConfigVal("info_windSpeed") and curr.get("wind_speed") is not None:
-                wind_val = weather_client.convertWindSpeed(curr["wind_speed"], unit_wind)
-                unit_labels = {0: _("m/s"), 1: _("km/h"), 2: _("mph")}
-                lbl = unit_labels.get(unit_wind, "")
-                speed_str = _("{wind:.1f} {lbl}").format(wind=wind_val, lbl=lbl)
-                    
-                if config_manager.getConfigVal("info_windDirection") and curr.get("wind_dir") is not None:
-                    dir_name = weather_client.getWindDirectionName(curr["wind_dir"])
-                    parts.append(_("Wind: {speed} from {dir}").format(speed=speed_str, dir=dir_name))
+            if wind_dir is not None:
+                wind_dir_name = weather_client.getWindDirectionName(wind_dir)
+            else:
+                wind_dir_name = _("Unknown")
+                
+            if wind_gust is not None and wind_gust > 0:
+                gust_kmh = int(round(wind_gust * 3.6))
+                gust_mph = int(round(wind_gust * 2.23694))
+                lines.append(_("Wind: {dir} at {speed_kmh} km/h ({speed_mph} mph), with occasional gusts up to {gust_kmh} km/h ({gust_mph} mph)").format(
+                    dir=wind_dir_name, speed_kmh=speed_kmh, speed_mph=speed_mph, gust_kmh=gust_kmh, gust_mph=gust_mph
+                ))
+            else:
+                lines.append(_("Wind: {dir} at {speed_kmh} km/h ({speed_mph} mph)").format(
+                    dir=wind_dir_name, speed_kmh=speed_kmh, speed_mph=speed_mph
+                ))
+                
+            # Humidity
+            humidity_val = curr.get("humidity")
+            if humidity_val is not None:
+                humidity = int(round(humidity_val))
+                if humidity < 30:
+                    humidity_desc = _("Low")
+                elif humidity <= 60:
+                    humidity_desc = _("Moderate")
                 else:
-                    parts.append(_("Wind: {speed}").format(speed=speed_str))
-            elif config_manager.getConfigVal("info_windDirection") and curr.get("wind_dir") is not None:
-                dir_name = weather_client.getWindDirectionName(curr["wind_dir"])
-                parts.append(_("Wind direction: {dir}").format(dir=dir_name))
+                    humidity_desc = _("High")
+            else:
+                humidity = 0
+                humidity_desc = _("Unknown")
+            lines.append(_("Humidity: {desc}, around {humidity}%").format(desc=humidity_desc, humidity=humidity))
+            
+            # Visibility
+            vis_km = curr.get("visibility")
+            if vis_km is not None:
+                vis_miles = int(round(vis_km * 0.621371))
+                if vis_km >= 9.5:
+                    vis_desc = _("Clear")
+                elif vis_km >= 5:
+                    vis_desc = _("Moderate")
+                elif vis_km >= 2:
+                    vis_desc = _("Poor")
+                else:
+                    vis_desc = _("Very Poor")
+            else:
+                vis_miles = 0
+                vis_desc = _("Unknown")
+            lines.append(_("Visibility: {desc} (around {vis_miles} miles)").format(desc=vis_desc, vis_miles=vis_miles))
+            
+            # Air Quality
+            aqi = curr.get("aqi")
+            if aqi:
+                lines.append(_("Air Quality: {aqi}").format(aqi=aqi))
                 
-            if config_manager.getConfigVal("info_pressure") and curr.get("pressure") is not None:
-                press_val = weather_client.convertPressure(curr["pressure"], unit_pressure)
-                lbl = _("inHg") if unit_pressure == 1 else _("hPa")
-                press_fmt = "{press:.2f}" if unit_pressure == 1 else "{press:.0f}"
-                parts.append((_("Pressure: ") + press_fmt + " {lbl}").format(press=press_val, lbl=lbl))
+            # Today's Forecast (Tonight's/Today's Forecast)
+            if hour >= 18 or hour < 5:
+                forecast_header = _("Tonight's Forecast")
+            else:
+                forecast_header = _("Today's Forecast")
+            lines.append(forecast_header)
+            
+            today_forecast = daily_list[0] if daily_list else {}
+            today_summary = today_forecast.get("summary") or today_forecast.get("condition") or _("No forecast available.")
+            lines.append(today_summary)
+            
+            # Tomorrow's Outlook
+            tomorrow_dt = dt + datetime.timedelta(days=1)
+            tomorrow_date_str = tomorrow_dt.strftime("%A, %B ") + str(tomorrow_dt.day)
+            lines.append(_("Tomorrow's Outlook ({tomorrow_date_str})").format(tomorrow_date_str=tomorrow_date_str))
+            
+            tomorrow_forecast = daily_list[1] if len(daily_list) > 1 else {}
+            tomorrow_max = tomorrow_forecast.get("temp_max")
+            tomorrow_min = tomorrow_forecast.get("temp_min")
+            
+            if tomorrow_max is not None:
+                tomorrow_max_c = int(round(tomorrow_max))
+                tomorrow_max_f = int(round((tomorrow_max * 9/5) + 32))
+            else:
+                tomorrow_max_c, tomorrow_max_f = 0, 32
+                
+            if tomorrow_min is not None:
+                tomorrow_min_c = int(round(tomorrow_min))
+                tomorrow_min_f = int(round((tomorrow_min * 9/5) + 32))
+            else:
+                tomorrow_min_c, tomorrow_min_f = 0, 32
+                
+            tomorrow_cond_day = ""
+            tomorrow_cond_night = ""
+            tomorrow_summary = tomorrow_forecast.get("summary", "")
+            tomorrow_cond = tomorrow_forecast.get("condition", "")
+            
+            if tomorrow_summary:
+                sentences = [s.strip() for s in tomorrow_summary.split(".") if s.strip()]
+                if len(sentences) >= 2:
+                    tomorrow_cond_day = sentences[0]
+                    tomorrow_cond_night = sentences[1]
                     
-            if config_manager.getConfigVal("info_visibility") and curr.get("visibility") is not None:
-                vis_val = weather_client.convertVisibility(curr["visibility"], unit_visibility)
-                lbl = _("miles") if unit_visibility == 1 else _("km")
-                parts.append(_("Visibility: {vis:.1f} {lbl}").format(vis=vis_val, lbl=lbl))
+            if not tomorrow_cond_day or not tomorrow_cond_night:
+                h_day = ""
+                h_night = ""
+                tomorrow_date = tomorrow_dt.date()
+                for item in hourly_list:
+                    item_time = item.get("time")
+                    if item_time:
+                        item_dt = datetime.datetime.fromtimestamp(item_time)
+                        if item_dt.date() == tomorrow_date:
+                            if 12 <= item_dt.hour <= 15 and not h_day:
+                                h_day = item.get("condition", "")
+                            if 20 <= item_dt.hour <= 23 and not h_night:
+                                h_night = item.get("condition", "")
+                if not tomorrow_cond_day:
+                    tomorrow_cond_day = h_day or tomorrow_cond or _("Unknown")
+                if not tomorrow_cond_night:
+                    tomorrow_cond_night = h_night or tomorrow_cond or _("Unknown")
                     
-            if config_manager.getConfigVal("info_uvIndex") and curr.get("uvi") is not None:
-                parts.append(_("UV index: {uvi}").format(uvi=curr["uvi"]))
-                
-            if config_manager.getConfigVal("info_clouds") and curr.get("clouds") is not None:
-                parts.append(_("Clouds: {clouds}%").format(clouds=curr["clouds"]))
-                
-            if config_manager.getConfigVal("info_dewPoint") and curr.get("dew_point") is not None:
-                dew_val = weather_client.convertTemp(curr["dew_point"], unit_temp)
-                deg = "°F" if unit_temp == 1 else "°C"
-                parts.append(_("Dew point: {dew:.1f}{deg}").format(dew=dew_val, deg=deg))
-                    
-            if config_manager.getConfigVal("info_airQuality") and curr.get("aqi") is not None:
-                parts.append(_("Air quality: {aqi}").format(aqi=curr["aqi"]))
-                
-            report_str = ", ".join(parts)
+            day_cond = tomorrow_cond_day.rstrip('.')
+            night_cond = tomorrow_cond_night.rstrip('.')
+            
+            lines.append(_("Daytime High: {max_c}°C ({max_f}°F) – {day_cond}.").format(
+                max_c=tomorrow_max_c, max_f=tomorrow_max_f, day_cond=day_cond
+            ))
+            lines.append(_("Nighttime Low: {min_c}°C ({min_f}°F) – {night_cond}.").format(
+                min_c=tomorrow_min_c, min_f=tomorrow_min_f, night_cond=night_cond
+            ))
+            
+            report_str = "\n".join(lines)
             if len(weather_data) > 1:
-                reports.append(f"{prov}: {report_str}")
+                reports.append(f"[{prov}]\n{report_str}")
             else:
                 reports.append(report_str)
-
-        loc_header = _("Weather for {location}").format(location=name)
-        full_msg = loc_header + ". " + ". ".join(reports)
+                
+        full_msg = "\n\n".join(reports)
         
         if copy_to_clipboard:
             api.setClipData(full_msg)

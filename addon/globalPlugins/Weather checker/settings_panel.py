@@ -172,7 +172,71 @@ class WeatherHistoryDialog(wx.Dialog):
         self.compareBtn.Enable()
         self.compareBtn.SetLabel(_("&Compare with Current"))
         
+        # Calculate natural trend summary first
+        trend_summary = ""
+        now = time.time()
+        for prov, current_prov_data in weather_data.items():
+            history_prov_data = entry.get("providers", {}).get(prov)
+            if not history_prov_data:
+                continue
+            
+            entry_time = entry.get("timestamp", now)
+            dt_entry = datetime.datetime.fromtimestamp(entry_time)
+            
+            diff_hours = (now - entry_time) / 3600.0
+            if 20 <= diff_hours <= 28:
+                time_ref = _("than this time yesterday")
+            elif 44 <= diff_hours <= 52:
+                time_ref = _("than two days ago")
+            else:
+                time_ref = _("than on {day} at {time}").format(
+                    day=dt_entry.strftime("%A"),
+                    time=dt_entry.strftime("%I:%M %p")
+                )
+                
+            hist_temp = history_prov_data.get("temp")
+            curr_temp = current_prov_data.get("current", {}).get("temp")
+            temp_sentence = ""
+            if hist_temp is not None and curr_temp is not None:
+                diff = curr_temp - hist_temp
+                if abs(diff) >= 0.1:
+                    unit_temp = config_manager.getConfigVal("unit_temp")
+                    if unit_temp == 1:
+                        diff_val = diff * 1.8
+                        unit_str = _("degrees Fahrenheit")
+                    else:
+                        diff_val = diff
+                        unit_str = _("degrees Celsius")
+                    direction = _("warmer") if diff > 0 else _("cooler")
+                    temp_sentence = _("the temperature is {diff:.1f} {unit} {direction}").format(
+                        diff=abs(diff_val), unit=unit_str, direction=direction
+                    )
+                    
+            hist_hum = history_prov_data.get("humidity")
+            curr_hum = current_prov_data.get("current", {}).get("humidity")
+            hum_sentence = ""
+            if hist_hum is not None and curr_hum is not None:
+                diff = curr_hum - hist_hum
+                if abs(diff) >= 1:
+                    direction = _("higher") if diff > 0 else _("lower")
+                    hum_sentence = _("humidity is {diff}% {direction}").format(
+                        diff=int(round(abs(diff))), direction=direction
+                    )
+                    
+            trend_parts = [p for p in [temp_sentence, hum_sentence] if p]
+            if trend_parts:
+                trend_summary = " and ".join(trend_parts) + " " + time_ref + "."
+                trend_summary = trend_summary[0].upper() + trend_summary[1:]
+            break # trend summary is based on the first provider
+            
+        if trend_summary:
+            speech.speakMessage(trend_summary)
+
         lines = []
+        if trend_summary:
+            lines.append(trend_summary)
+            lines.append("")
+            
         unit_temp = config_manager.getConfigVal("unit_temp")
         unit_wind = config_manager.getConfigVal("unit_wind")
         unit_pressure = config_manager.getConfigVal("unit_pressure")
@@ -610,10 +674,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         forecastSizer.Add(forecastTypeLabel, 0, wx.ALL | wx.EXPAND, 5)
         forecastSizer.Add(self.forecastTypeChoice, 0, wx.ALL | wx.EXPAND, 5)
 
-        forecastEntriesLabel = wx.StaticText(self, label=_("&Maximum entries to announce:"))
-        self.forecastEntriesCtrl = wx.SpinCtrl(self, min=1, max=24, initial=config_manager.getConfigVal("forecast_entries"))
-        forecastSizer.Add(forecastEntriesLabel, 0, wx.ALL | wx.EXPAND, 5)
-        forecastSizer.Add(self.forecastEntriesCtrl, 0, wx.ALL | wx.EXPAND, 5)
+
 
         self.mainSettingsSizer.Add(forecastSizer, 0, wx.ALL | wx.EXPAND, 10)
 
@@ -708,6 +769,12 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         self.alertSeverityChoice.SetSelection(config_manager.getConfigVal("alert_severityFilter"))
         alertsSizer.Add(severityLabel, 0, wx.ALL | wx.EXPAND, 5)
         alertsSizer.Add(self.alertSeverityChoice, 0, wx.ALL | wx.EXPAND, 5)
+
+        ignoredKeywordsLabel = wx.StaticText(self, label=_("Ignored alert &keywords (comma separated):"))
+        self.alertIgnoredKeywordsCtrl = wx.TextCtrl(self)
+        self.alertIgnoredKeywordsCtrl.SetValue(config_manager.getConfigVal("alert_ignoredKeywords"))
+        alertsSizer.Add(ignoredKeywordsLabel, 0, wx.ALL | wx.EXPAND, 5)
+        alertsSizer.Add(self.alertIgnoredKeywordsCtrl, 0, wx.ALL | wx.EXPAND, 5)
 
         self.mainSettingsSizer.Add(alertsSizer, 0, wx.ALL | wx.EXPAND, 10)
 
@@ -1008,7 +1075,6 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         
         # Forecast settings
         config_manager.setConfigVal("forecast_type", self.forecastTypeChoice.GetSelection())
-        config_manager.setConfigVal("forecast_entries", self.forecastEntriesCtrl.GetValue())
         
         # Weather checkboxes
         for key, cb in self.infoCbs.items():
@@ -1027,6 +1093,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         config_manager.setConfigVal("alert_showNotification", self.alertShowNotifCb.GetValue())
         config_manager.setConfigVal("alert_repeatInterval", self.alertRepeatChoice.GetSelection())
         config_manager.setConfigVal("alert_severityFilter", self.alertSeverityChoice.GetSelection())
+        config_manager.setConfigVal("alert_ignoredKeywords", self.alertIgnoredKeywordsCtrl.GetValue().strip())
         
         import config
         config.conf.save()

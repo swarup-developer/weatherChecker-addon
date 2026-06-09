@@ -80,6 +80,7 @@ confspec_dict = {
         "alert_showNotification": "boolean(default=true)",  # Display NVDA notifications
         "alert_repeatInterval": "integer(default=0)",      # Choice: 0: Disabled, 1: 5m, 2: 10m, 3: 15m, 4: 30m, 5: 60m
         "alert_severityFilter": "integer(default=0)",      # 0: All, 1: Moderate+, 2: Severe+, 3: Extreme
+        "alert_ignoredKeywords": "string(default='')",
         
         # Cache for auto detected location
         "cachedLat": "string(default='')",

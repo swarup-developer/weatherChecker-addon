@@ -637,6 +637,7 @@ def _fetchOpenWeather(lat, lon, key):
             "feels_like": current.get("feels_like"),
             "humidity": current.get("humidity"),
             "wind_speed": current.get("wind_speed"),
+            "wind_gust": current.get("wind_gust"),
             "wind_dir": current.get("wind_deg"),
             "pressure": current.get("pressure"),
             "visibility": current.get("visibility", 10000) / 1000.0,
@@ -678,6 +679,7 @@ def _fetchOpenWeather(lat, lon, key):
                 "temp_min": d_temp.get("min"),
                 "temp_max": d_temp.get("max"),
                 "condition": d_cond.capitalize(),
+                "summary": d.get("summary", ""),
                 "sunrise": d.get("sunrise"),
                 "sunset": d.get("sunset"),
                 "moon_phase": d.get("moon_phase")
@@ -751,6 +753,7 @@ def _fetchOpenWeather(lat, lon, key):
             "feels_like": main_data.get("feels_like"),
             "humidity": humidity,
             "wind_speed": wind_data.get("speed"),
+            "wind_gust": wind_data.get("gust"),
             "wind_dir": wind_data.get("deg"),
             "pressure": main_data.get("pressure"),
             "visibility": curr_data.get("visibility", 10000) / 1000.0,
@@ -814,6 +817,7 @@ def _fetchOpenWeather(lat, lon, key):
                 "temp_min": min_temp,
                 "temp_max": max_temp,
                 "condition": rep_cond.capitalize(),
+                "summary": rep_cond.capitalize(),
                 "sunrise": None,
                 "sunset": None,
                 "moon_phase": None
@@ -836,7 +840,7 @@ def _fetchOpenWeather(lat, lon, key):
                     4: _("Poor"),
                     5: _("Very Poor")
                 }
-                normalized["current"]["aqi"] = aqi_names.get(aqi_code, _("Unknown"))
+                normalized["current"]["aqi"] = aqi_names.get(aqi_code, _("Unknown")) + f" ({aqi_code})"
     except Exception as e:
         log.error("Failed to query Air Pollution API", exc_info=True)
 
@@ -862,6 +866,7 @@ def _fetchPirateWeather(lat, lon, key):
         "feels_like": current.get("apparentTemperature"),
         "humidity": int(current.get("humidity", 0) * 100) if current.get("humidity") is not None else None,
         "wind_speed": current.get("windSpeed"),
+        "wind_gust": current.get("windGust"),
         "wind_dir": current.get("windBearing"),
         "pressure": current.get("pressure"),
         "visibility": current.get("visibility"),
@@ -898,6 +903,7 @@ def _fetchPirateWeather(lat, lon, key):
             "temp_min": d.get("temperatureMin"),
             "temp_max": d.get("temperatureMax"),
             "condition": d.get("summary", ""),
+            "summary": d.get("summary", ""),
             "sunrise": d.get("sunriseTime"),
             "sunset": d.get("sunsetTime"),
             "moon_phase": d.get("moonPhase")
@@ -1114,6 +1120,35 @@ def _get_installed_version():
 
     return "0.0.0"
 
+def _extract_latest_version_changes(release_notes):
+    """
+    Parses the release notes text and returns only the section corresponding
+    to the latest version changes (i.e. the first version block).
+    """
+    if not release_notes:
+        return ""
+    import re
+    lines = release_notes.splitlines()
+    extracted = []
+    found_first_version = False
+    
+    # Match lines like "Version 3.4.0:" or "## Version 2.0.8 — Final Release:"
+    version_pattern = re.compile(r'^(?:#+\s*)?Version\s+\d+(?:\.\d+)*.*:', re.IGNORECASE)
+    
+    for line in lines:
+        if version_pattern.match(line.strip()):
+            if found_first_version:
+                break
+            else:
+                found_first_version = True
+                extracted.append(line)
+        elif found_first_version:
+            extracted.append(line)
+            
+    if extracted:
+        return "\n".join(extracted).strip()
+    return release_notes
+
 def checkForUpdates():
     """
     Query GitHub for the latest release and compare against the installed version.
@@ -1185,7 +1220,8 @@ def checkForUpdates():
         download_url = data.get("html_url",
                                 "https://github.com/swarup-developer/weatherChecker-addon/releases")
 
-    release_notes = data.get("body", "") or ""
+    release_notes_raw = data.get("body", "") or ""
+    release_notes = _extract_latest_version_changes(release_notes_raw)
 
     update_available = _version_is_newer(latest_version, current_version)
 

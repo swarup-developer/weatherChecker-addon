@@ -61,8 +61,26 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           if [ -f whats_new.txt ]; then
-            cat whats_new.txt > release_notes.txt
-          else
+            python -c '
+import re
+with open("whats_new.txt", "r", encoding="utf-8") as f:
+    content = f.read()
+lines = content.splitlines()
+extracted = []
+found = False
+version_pattern = re.compile(r"^(?:#+\s*)?Version\s+\d+(?:\.\d+)*.*:", re.IGNORECASE)
+for line in lines:
+    if version_pattern.match(line.strip()):
+        if found:
+            break
+        found = True
+        extracted.append(line)
+    elif found:
+        extracted.append(line)
+with open("release_notes.txt", "w", encoding="utf-8") as f:
+    f.write("\n".join(extracted).strip())
+'
+          else:
             git log -1 --pretty=%B > release_notes.txt
           fi
 
