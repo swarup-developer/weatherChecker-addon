@@ -1,3 +1,12 @@
+Version 3.2.0:
+- Improved: Re-implemented geocoding search to use a highly resilient chain starting with Komoot's Photon API (completely keyless, case-insensitive, fast, and structured) and falling back to OpenWeather Geocoding and Overpass QL.
+- Improved: Added local JSON caching of search results in the user's NVDA AppData directory to prevent API rate limits and speed up location queries.
+- Improved: Added a global keyless AQI fallback using Open-Meteo Air Quality API so Pirate Weather and OpenWeather users always get air quality announcements.
+- Improved: Checking the "Automatically detect my location" checkbox now immediately triggers auto-detection in the background and saves/announces the detected location.
+- Improved: Enhanced search dialog accessibility (initial focus sets to search box, OK button set as default to support Enter key selection).
+- Improved: Cleaned up settings UI by removing the manual Use Current Location button and preventing empty country parentheses from displaying.
+- Change: The "Air quality when available" checkbox is now unchecked by default.
+
 Version 3.1.0:
 - Improved: Replaced legacy geocoding services (geocode.maps.co, OpenWeather Geocoding, Nominatim) with Overpass API using HTTP POST.
 - Improved: Added multi-mirror failover support for Overpass API mirrors to handle server load and timeouts seamlessly.

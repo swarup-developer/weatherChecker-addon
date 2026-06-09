@@ -95,7 +95,7 @@ def _geocodePhoton(query):
     import urllib.parse
     url = f"https://photon.komoot.io/api/?q={urllib.parse.quote(query)}&limit=15"
     headers = {
-        "User-Agent": "WeatherCheckerNVDA/3.1.0 (contact: swarupbaral102@gmail.com)",
+        "User-Agent": "WeatherCheckerNVDA/3.2.0 (contact: swarupbaral102@gmail.com)",
         "Accept": "application/json"
     }
     resp = requests.get(url, headers=headers, timeout=10)
@@ -136,7 +136,7 @@ def _geocodeOpenWeather(query, key):
     import urllib.parse
     url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(query)}&limit=15&appid={key}"
     headers = {
-        "User-Agent": "WeatherCheckerNVDA/3.1.0 (contact: swarupbaral102@gmail.com)"
+        "User-Agent": "WeatherCheckerNVDA/3.2.0 (contact: swarupbaral102@gmail.com)"
     }
     resp = requests.get(url, headers=headers, timeout=10)
     if resp.status_code != 200:
@@ -211,7 +211,7 @@ def _geocodeOverpass(query):
     """
 
     headers = {
-        "User-Agent": "WeatherCheckerNVDA/3.1.0 (contact: swarupbaral102@gmail.com)",
+        "User-Agent": "WeatherCheckerNVDA/3.2.0 (contact: swarupbaral102@gmail.com)",
         "Accept": "application/json"
     }
 
@@ -1120,7 +1120,7 @@ def _get_installed_version():
     except Exception:
         pass
     # Hard-coded fallback that always matches current buildVars
-    return "3.1.0"
+    return "3.2.0"
 
 
 def checkForUpdates():
