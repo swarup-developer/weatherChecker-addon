@@ -586,9 +586,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             0: _("Hourly forecast"),
             1: _("12-hour forecast"),
             2: _("24-hour forecast"),
-            3: _("Daily forecast"),
-            4: _("7-day forecast"),
-            5: _("10-day forecast")
+            3: _("3-day forecast"),
+            4: _("5-day forecast"),
+            5: _("7-day forecast"),
+            6: _("10-day forecast")
         }
         
         prov_reports = []
@@ -620,10 +621,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                     step = len(candidates) / float(max_entries)
                     entries = [candidates[int(i * step)] for i in range(max_entries)]
             elif forecast_type == 3:
-                entries = daily_list[:max_entries]
+                entries = daily_list[:min(max_entries, 3)]
             elif forecast_type == 4:
-                entries = daily_list[:min(max_entries, 7)]
+                entries = daily_list[:min(max_entries, 5)]
             elif forecast_type == 5:
+                entries = daily_list[:min(max_entries, 7)]
+            elif forecast_type == 6:
                 entries = daily_list[:min(max_entries, 10)]
 
             formatted_entries = []

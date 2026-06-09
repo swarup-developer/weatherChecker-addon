@@ -600,7 +600,8 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
             _("Hourly forecast"),
             _("12-hour forecast"),
             _("24-hour forecast"),
-            _("Daily forecast"),
+            _("3-day forecast"),
+            _("5-day forecast"),
             _("7-day forecast"),
             _("10-day forecast")
         ]

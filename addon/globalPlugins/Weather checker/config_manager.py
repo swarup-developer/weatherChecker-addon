@@ -53,7 +53,7 @@ confspec_dict = {
         "info_airQuality": "boolean(default=false)",
         
         # Forecast Settings
-        "forecast_type": "integer(default=3)",             # 0: Hourly, 1: 12-hour, 2: 24-hour, 3: Daily, 4: 7-day, 5: 10-day
+        "forecast_type": "integer(default=3)",             # 0: Hourly, 1: 12-hour, 2: 24-hour, 3: 3-day, 4: 5-day, 5: 7-day, 6: 10-day
         "forecast_entries": "integer(default=3)",          # Number of forecast entries to announce
         
         # Astronomy Settings
