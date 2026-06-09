@@ -91,17 +91,85 @@ def _verifyPirateWeatherKey(key):
         return False, _("Network error: ") + str(e)
 
 
-def geocodeLocation(query, provider=None, openWeatherKey=None):
-    """
-    Search for location matching query using OpenStreetMap Overpass API.
-    Iterates through multiple global public mirrors for failover.
-    """
-    if not query or not query.strip():
-        raise GeocodingError(_("Search query cannot be empty."))
+def _geocodePhoton(query):
+    import urllib.parse
+    url = f"https://photon.komoot.io/api/?q={urllib.parse.quote(query)}&limit=15"
+    headers = {
+        "User-Agent": "WeatherCheckerNVDA/3.1.0 (contact: swarupbaral102@gmail.com)",
+        "Accept": "application/json"
+    }
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        raise GeocodingError(f"Photon API returned status {resp.status_code}")
+    
+    features = resp.json().get("features", [])
+    results = []
+    for feat in features:
+        props = feat.get("properties", {})
+        geom = feat.get("geometry", {})
+        coords = geom.get("coordinates", [])
+        if len(coords) < 2:
+            continue
+        
+        name = props.get("name")
+        if not name:
+            continue
+            
+        region = props.get("state") or props.get("county") or ""
+        country = props.get("country") or ""
+        lat = float(coords[1])
+        lon = float(coords[0])
+        osm_value = props.get("osm_value") or props.get("osm_key") or "node"
+        
+        results.append({
+            "name": name,
+            "region": region,
+            "country": country,
+            "lat": lat,
+            "lon": lon,
+            "osm_type": osm_value
+        })
+    return results
 
-    query = query.strip()
 
-    # Build variants for exact match to cover common cases without regex timeouts
+def _geocodeOpenWeather(query, key):
+    import urllib.parse
+    url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(query)}&limit=15&appid={key}"
+    headers = {
+        "User-Agent": "WeatherCheckerNVDA/3.1.0 (contact: swarupbaral102@gmail.com)"
+    }
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        raise GeocodingError(f"OpenWeather Geocoding returned status {resp.status_code}")
+        
+    elements = resp.json()
+    if not isinstance(elements, list):
+        return []
+        
+    results = []
+    for item in elements:
+        name = item.get("name")
+        if not name:
+            continue
+            
+        region = item.get("state") or ""
+        country = item.get("country") or ""
+        lat = float(item.get("lat", 0.0))
+        lon = float(item.get("lon", 0.0))
+        
+        results.append({
+            "name": name,
+            "region": region,
+            "country": country,
+            "lat": lat,
+            "lon": lon,
+            "osm_type": "city"
+        })
+    return results
+
+
+def _geocodeOverpass(query):
+    # Escape double quotes for Overpass QL
     variants = [query]
     title_q = query.title()
     if title_q not in variants:
@@ -154,15 +222,14 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
         "https://overpass.kumi.systems/api/interpreter"
     ]
 
-    results = []
+    elements = []
     last_error_msg = ""
     is_rate_limited = False
     is_timeout = False
 
     for url in endpoints:
-        results = []
+        elements = []
         try:
-            # 1. Try exact match query
             resp = requests.post(
                 url,
                 data=exact_q.encode('utf-8'),
@@ -170,10 +237,8 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
                 timeout=12
             )
             if resp.status_code == 200:
-                results = resp.json().get("elements", [])
-                
-                # If exact query succeeded but returned 0 elements, try regex fallback on the same server
-                if not results:
+                elements = resp.json().get("elements", [])
+                if not elements:
                     resp_reg = requests.post(
                         url,
                         data=regex_q.encode('utf-8'),
@@ -181,36 +246,26 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
                         timeout=20
                     )
                     if resp_reg.status_code == 200:
-                        results = resp_reg.json().get("elements", [])
+                        elements = resp_reg.json().get("elements", [])
                     elif resp_reg.status_code == 429:
-                        log.warning(f"Overpass mirror {url} regex query rate-limited.")
                         is_rate_limited = True
                         continue
                     else:
-                        log.warning(f"Overpass mirror {url} regex query returned HTTP {resp_reg.status_code}.")
                         continue
             elif resp.status_code == 429:
-                log.warning(f"Overpass mirror {url} exact query rate-limited.")
                 is_rate_limited = True
                 continue
             else:
-                log.warning(f"Overpass mirror {url} exact query returned HTTP {resp.status_code}.")
                 continue
-                
         except requests.exceptions.Timeout:
-            log.warning(f"Overpass mirror {url} request timed out.")
             is_timeout = True
             continue
         except Exception as e:
-            log.warning(f"Overpass mirror {url} request failed: {e}")
             last_error_msg = str(e)
             continue
-
-        # If we successfully completed queries on a server, break the endpoint loop
-        # (even if results list is empty, it means we got a valid 200 from the server)
         break
 
-    if not results:
+    if not elements:
         if is_rate_limited:
             raise GeocodingError(_("All Overpass servers are currently busy. Please try again in a moment."))
         elif is_timeout:
@@ -218,19 +273,15 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
         elif last_error_msg:
             raise NetworkError(_("Network failure while searching location: ") + last_error_msg)
         else:
-            raise GeocodingError(_("No locations found for: ") + query)
+            return []
 
-    # Parse and format the elements
-    formatted = []
-    for item in results:
+    results = []
+    for item in elements:
         tags = item.get("tags", {})
-        
-        # Extract name
         name = tags.get("name") or tags.get("name:en") or tags.get("official_name") or ""
         if not name:
             continue
             
-        # Extract region/state
         region = (
             tags.get("addr:state") or 
             tags.get("is_in:state") or 
@@ -240,7 +291,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             ""
         )
         
-        # Extract country
         country = (
             tags.get("addr:country") or 
             tags.get("is_in:country") or 
@@ -249,7 +299,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             ""
         )
         
-        # Parse is_in string as fallback hierarchy
         is_in_str = tags.get("is_in") or tags.get("is_in:short")
         if is_in_str and (not region or not country):
             parts = [p.strip() for p in is_in_str.split(",") if p.strip()]
@@ -261,7 +310,6 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             elif len(parts) == 1 and not country:
                 country = parts[0]
 
-        # Extract coordinates
         lat = 0.0
         lon = 0.0
         if item.get("type") == "node":
@@ -271,10 +319,9 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             lat = float(item["center"].get("lat", 0.0))
             lon = float(item["center"].get("lon", 0.0))
         else:
-            # Skip if no coordinates available
             continue
 
-        formatted.append({
+        results.append({
             "name": name,
             "region": region,
             "country": country,
@@ -282,8 +329,54 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             "lon": lon,
             "osm_type": item.get("type", "")
         })
+    return results
 
-    # Prioritization ranking sorting: exact name match first (case sensitive), then case insensitive, then prefix, then substring
+
+def geocodeLocation(query, provider=None, openWeatherKey=None):
+    """
+    Search for location matching query using a multi-service geocoding flow:
+    1. Try Photon Geocoding API (free, keyless, fast, case-insensitive)
+    2. Try OpenWeather Geocoding API (if OpenWeather API key is configured)
+    3. Try Overpass API (fallback)
+    """
+    if not query or not query.strip():
+        raise GeocodingError(_("Search query cannot be empty."))
+
+    query = query.strip()
+    errors = []
+    results = []
+
+    # 1. Try Photon Geocoding (Primary keyless geocoder)
+    try:
+        results = _geocodePhoton(query)
+    except Exception as e:
+        log.warning(f"Photon geocoding failed: {e}")
+        errors.append(f"Photon: {e}")
+
+    # 2. Try OpenWeather Geocoding (Secondary geocoder using user's key)
+    if not results and openWeatherKey and openWeatherKey.strip():
+        try:
+            results = _geocodeOpenWeather(query, openWeatherKey.strip())
+        except Exception as e:
+            log.warning(f"OpenWeather geocoding failed: {e}")
+            errors.append(f"OpenWeather: {e}")
+
+    # 3. Try Overpass API (Tertiary fallback)
+    if not results:
+        try:
+            results = _geocodeOverpass(query)
+        except Exception as e:
+            log.warning(f"Overpass geocoding failed: {e}")
+            errors.append(f"Overpass: {e}")
+
+    if not results:
+        err_msg = "; ".join(errors)
+        if err_msg:
+            raise GeocodingError(_("Location search failed: ") + err_msg)
+        else:
+            raise GeocodingError(_("No locations found for: ") + query)
+
+    # Prioritization ranking sorting
     def get_rank_key(item):
         name_lower = item["name"].lower()
         query_lower = query.lower()
@@ -295,12 +388,12 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
             return 2
         return 3
 
-    formatted.sort(key=get_rank_key)
+    results.sort(key=get_rank_key)
 
     # De-duplicate results
     seen = set()
     unique_formatted = []
-    for r in formatted:
+    for r in results:
         key = (r["name"].lower(), r["region"].lower(), r["country"].lower())
         if key not in seen:
             seen.add(key)
