@@ -332,9 +332,44 @@ def _geocodeOverpass(query):
     return results
 
 
+def getSearchCacheFilePath():
+    import os
+    try:
+        import NVDAState
+        config_dir = NVDAState.WritePaths.configDir
+    except ImportError:
+        import tempfile
+        config_dir = tempfile.gettempdir()
+    return os.path.join(config_dir, "weather_checker_search_cache.json")
+
+
+def _loadSearchCache():
+    import json
+    import os
+    path = getSearchCacheFilePath()
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _saveSearchCache(cache):
+    import json
+    path = getSearchCacheFilePath()
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
 def geocodeLocation(query, provider=None, openWeatherKey=None):
     """
-    Search for location matching query using a multi-service geocoding flow:
+    Search for location matching query using a multi-service geocoding flow
+    with a local AppData cache to prevent rate-limiting:
     1. Try Photon Geocoding API (free, keyless, fast, case-insensitive)
     2. Try OpenWeather Geocoding API (if OpenWeather API key is configured)
     3. Try Overpass API (fallback)
@@ -343,6 +378,13 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
         raise GeocodingError(_("Search query cannot be empty."))
 
     query = query.strip()
+    cache_key = query.lower()
+
+    # Load cache and check if we already have results
+    cache = _loadSearchCache()
+    if cache_key in cache:
+        return cache[cache_key]
+
     errors = []
     results = []
 
@@ -401,6 +443,10 @@ def geocodeLocation(query, provider=None, openWeatherKey=None):
 
     if not unique_formatted:
         raise GeocodingError(_("No locations found for: ") + query)
+
+    # Save to cache
+    cache[cache_key] = unique_formatted
+    _saveSearchCache(cache)
 
     return unique_formatted
 
