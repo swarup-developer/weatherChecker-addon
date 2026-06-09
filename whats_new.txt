@@ -1,3 +1,7 @@
+Version 3.4.0:
+- Improved: Configured the automatic startup update check to trigger even on the first run of the add-on.
+- Improved: Reduced the background startup update check delay from 15 seconds to 5 seconds for faster and more responsive update detection.
+
 Version 3.3.0:
 - Improved: Made all version strings dynamic in the code, eliminating hardcoded version numbers in request headers and fallbacks.
 - Improved: Cleaned up the client source code by removing all internal inline comments.

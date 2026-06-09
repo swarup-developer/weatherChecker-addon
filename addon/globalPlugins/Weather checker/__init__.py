@@ -64,7 +64,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         # Check for first run and queue welcome message
         if config_manager.getConfigVal("firstRun"):
             wx.CallAfter(self.showFirstRunMessage)
-        elif config_manager.getConfigVal("auto_update_check"):
+        if config_manager.getConfigVal("auto_update_check"):
             # Queue startup update check
             wx.CallAfter(self.startStartupUpdateCheck)
 
@@ -143,8 +143,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         t.start()
 
     def _runStartupUpdateCheck(self):
-        # Wait 15 s after NVDA starts so initial speech is not interrupted
-        time.sleep(15.0)
+        # Wait 5 s after NVDA starts so initial speech is not interrupted
+        time.sleep(5.0)
         try:
             update_available, latest_version, download_url, body = weather_client.checkForUpdates()
             if update_available:
