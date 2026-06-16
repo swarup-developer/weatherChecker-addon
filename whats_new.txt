@@ -1,3 +1,7 @@
+Version 4.4.0:
+- Improved: Added a "Show API key" checkbox in settings to toggle the plain text visibility of OpenWeather and Pirate Weather API keys.
+- Improved: Renamed the credentials verification button to "Test Provider Settings" and configured it to hide automatically after a successful test.
+
 Version 4.3.2:
 - Improved: Updated the current weather report format to use a highly detailed, structured layout matching standard forecast layouts.
 - Improved: Added support for retrieving and displaying wind gusts and daily forecast summaries.

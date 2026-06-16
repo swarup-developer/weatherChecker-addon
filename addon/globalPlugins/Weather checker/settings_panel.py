@@ -477,25 +477,46 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         providerSizer.Add(providerLabel, 0, wx.ALL | wx.EXPAND, 5)
         providerSizer.Add(self.providerChoice, 0, wx.ALL | wx.EXPAND, 5)
 
+        self.keysTestedSuccessfully = False
+
         self.openWeatherKeyLabel = wx.StaticText(self, label=_("Open&Weather API Key:"))
         self.openWeatherKeyCtrl = wx.TextCtrl(self, style=wx.TE_PASSWORD)
         self.openWeatherKeyCtrl.SetValue(config_manager.getConfigVal("openWeatherApiKey"))
+        self.openWeatherKeyCtrlText = wx.TextCtrl(self)
+        self.openWeatherKeyCtrlText.SetValue(config_manager.getConfigVal("openWeatherApiKey"))
+        self.openWeatherKeyCtrlText.Hide()
+        
+        self.openWeatherKeyCtrl.Bind(wx.EVT_TEXT, self.onKeyTextChanged)
+        self.openWeatherKeyCtrlText.Bind(wx.EVT_TEXT, self.onKeyTextChanged)
         
         self.openWeatherKeySizer = wx.BoxSizer(wx.VERTICAL)
         self.openWeatherKeySizer.Add(self.openWeatherKeyLabel, 0, wx.ALL | wx.EXPAND, 5)
         self.openWeatherKeySizer.Add(self.openWeatherKeyCtrl, 0, wx.ALL | wx.EXPAND, 5)
+        self.openWeatherKeySizer.Add(self.openWeatherKeyCtrlText, 0, wx.ALL | wx.EXPAND, 5)
         providerSizer.Add(self.openWeatherKeySizer, 0, wx.EXPAND)
 
         self.pirateWeatherKeyLabel = wx.StaticText(self, label=_("P&irate Weather API Key:"))
         self.pirateWeatherKeyCtrl = wx.TextCtrl(self, style=wx.TE_PASSWORD)
         self.pirateWeatherKeyCtrl.SetValue(config_manager.getConfigVal("pirateWeatherApiKey"))
+        self.pirateWeatherKeyCtrlText = wx.TextCtrl(self)
+        self.pirateWeatherKeyCtrlText.SetValue(config_manager.getConfigVal("pirateWeatherApiKey"))
+        self.pirateWeatherKeyCtrlText.Hide()
+        
+        self.pirateWeatherKeyCtrl.Bind(wx.EVT_TEXT, self.onKeyTextChanged)
+        self.pirateWeatherKeyCtrlText.Bind(wx.EVT_TEXT, self.onKeyTextChanged)
         
         self.pirateWeatherKeySizer = wx.BoxSizer(wx.VERTICAL)
         self.pirateWeatherKeySizer.Add(self.pirateWeatherKeyLabel, 0, wx.ALL | wx.EXPAND, 5)
         self.pirateWeatherKeySizer.Add(self.pirateWeatherKeyCtrl, 0, wx.ALL | wx.EXPAND, 5)
+        self.pirateWeatherKeySizer.Add(self.pirateWeatherKeyCtrlText, 0, wx.ALL | wx.EXPAND, 5)
         providerSizer.Add(self.pirateWeatherKeySizer, 0, wx.EXPAND)
 
-        self.verifyBtn = wx.Button(self, label=_("&Verify Provider Settings"))
+        self.showApiKeyCb = wx.CheckBox(self, label=_("&Show API key"))
+        self.showApiKeyCb.SetValue(False)
+        self.showApiKeyCb.Bind(wx.EVT_CHECKBOX, self.onShowApiKeyToggled)
+        providerSizer.Add(self.showApiKeyCb, 0, wx.ALL, 5)
+
+        self.verifyBtn = wx.Button(self, label=_("&Test Provider Settings"))
         self.verifyBtn.Bind(wx.EVT_BUTTON, self.onVerifySettings)
         providerSizer.Add(self.verifyBtn, 0, wx.ALL | wx.ALIGN_LEFT, 5)
 
@@ -779,18 +800,74 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
         self.mainSettingsSizer.Add(alertsSizer, 0, wx.ALL | wx.EXPAND, 10)
 
         self.updateProviderFieldsVisibility()
+        self.updateVerifyButtonVisibility()
         self.updateLocationFieldsVisibility()
+
+    # Helpers and Handlers for API Keys
+    def _getOpenWeatherKey(self):
+        if self.showApiKeyCb.GetValue():
+            return self.openWeatherKeyCtrlText.GetValue()
+        return self.openWeatherKeyCtrl.GetValue()
+
+    def _getPirateWeatherKey(self):
+        if self.showApiKeyCb.GetValue():
+            return self.pirateWeatherKeyCtrlText.GetValue()
+        return self.pirateWeatherKeyCtrl.GetValue()
+
+    def updateVerifyButtonVisibility(self):
+        show_button = not getattr(self, "keysTestedSuccessfully", False)
+        self.verifyBtn.Show(show_button)
+        self.Layout()
+        self._sendLayoutUpdatedEvent()
+
+    def onKeyTextChanged(self, event):
+        val = event.GetString()
+        evt_obj = event.GetEventObject()
+        
+        if evt_obj == self.openWeatherKeyCtrl:
+            if self.openWeatherKeyCtrlText.GetValue() != val:
+                self.openWeatherKeyCtrlText.SetValue(val)
+        elif evt_obj == self.openWeatherKeyCtrlText:
+            if self.openWeatherKeyCtrl.GetValue() != val:
+                self.openWeatherKeyCtrl.SetValue(val)
+        elif evt_obj == self.pirateWeatherKeyCtrl:
+            if self.pirateWeatherKeyCtrlText.GetValue() != val:
+                self.pirateWeatherKeyCtrlText.SetValue(val)
+        elif evt_obj == self.pirateWeatherKeyCtrlText:
+            if self.pirateWeatherKeyCtrl.GetValue() != val:
+                self.pirateWeatherKeyCtrl.SetValue(val)
+            
+        self.keysTestedSuccessfully = False
+        self.updateVerifyButtonVisibility()
+        event.Skip()
+
+    def onShowApiKeyToggled(self, event):
+        show_plain = self.showApiKeyCb.GetValue()
+        if show_plain:
+            # Sync password -> plain text
+            self.openWeatherKeyCtrlText.SetValue(self.openWeatherKeyCtrl.GetValue())
+            self.pirateWeatherKeyCtrlText.SetValue(self.pirateWeatherKeyCtrl.GetValue())
+        else:
+            # Sync plain text -> password
+            self.openWeatherKeyCtrl.SetValue(self.openWeatherKeyCtrlText.GetValue())
+            self.pirateWeatherKeyCtrl.SetValue(self.pirateWeatherKeyCtrlText.GetValue())
+            
+        self.updateProviderFieldsVisibility()
 
     # Dynamic Field Visibilities
     def updateProviderFieldsVisibility(self):
         selection = self.providerChoice.GetSelection()
         show_ow = (selection in (0, 2))
         show_pw = (selection in (1, 2))
+        show_plain = self.showApiKeyCb.GetValue()
         
         self.openWeatherKeySizer.Show(self.openWeatherKeyLabel, show_ow)
-        self.openWeatherKeySizer.Show(self.openWeatherKeyCtrl, show_ow)
+        self.openWeatherKeySizer.Show(self.openWeatherKeyCtrl, show_ow and not show_plain)
+        self.openWeatherKeySizer.Show(self.openWeatherKeyCtrlText, show_ow and show_plain)
+        
         self.pirateWeatherKeySizer.Show(self.pirateWeatherKeyLabel, show_pw)
-        self.pirateWeatherKeySizer.Show(self.pirateWeatherKeyCtrl, show_pw)
+        self.pirateWeatherKeySizer.Show(self.pirateWeatherKeyCtrl, show_pw and not show_plain)
+        self.pirateWeatherKeySizer.Show(self.pirateWeatherKeyCtrlText, show_pw and show_plain)
         
         self.Layout()
         self._sendLayoutUpdatedEvent()
@@ -882,11 +959,11 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
 
     def onVerifySettings(self, event):
         provider = self.providerChoice.GetSelection()
-        ow_key = self.openWeatherKeyCtrl.GetValue().strip()
-        pw_key = self.pirateWeatherKeyCtrl.GetValue().strip()
+        ow_key = self._getOpenWeatherKey().strip()
+        pw_key = self._getPirateWeatherKey().strip()
         
         self.verifyBtn.Disable()
-        self.verifyBtn.SetLabel(_("Verifying..."))
+        self.verifyBtn.SetLabel(_("Testing..."))
         
         thread = threading.Thread(target=self._runVerification, args=(provider, ow_key, pw_key))
         thread.daemon = True
@@ -898,13 +975,17 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
 
     def _onVerificationComplete(self, success, msg):
         self.verifyBtn.Enable()
-        self.verifyBtn.SetLabel(_("&Verify Provider Settings"))
+        self.verifyBtn.SetLabel(_("&Test Provider Settings"))
         ui.message(msg)
         
+        if success:
+            self.keysTestedSuccessfully = True
+            self.updateVerifyButtonVisibility()
+            
         style = wx.OK | (wx.ICON_INFORMATION if success else wx.ICON_ERROR)
         gui.messageBox(
             message=msg,
-            caption=_("API Settings Verification"),
+            caption=_("API Settings Test"),
             style=style,
             parent=self
         )
@@ -912,7 +993,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
     # Location Search Handlers
     def onSearchLocationClick(self, event):
         provider = self.providerChoice.GetSelection()
-        ow_key = self.openWeatherKeyCtrl.GetValue().strip()
+        ow_key = self._getOpenWeatherKey().strip()
         
         dlg = LocationSearchDialog(self, provider, ow_key)
         if dlg.ShowModal() == wx.ID_OK:
@@ -933,7 +1014,7 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
 
     def onAddFavoriteLocationClick(self, event):
         provider = self.providerChoice.GetSelection()
-        ow_key = self.openWeatherKeyCtrl.GetValue().strip()
+        ow_key = self._getOpenWeatherKey().strip()
         
         dlg = LocationSearchDialog(self, provider, ow_key)
         if dlg.ShowModal() == wx.ID_OK:
@@ -1020,8 +1101,8 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
     # Save and Validation
     def isValid(self):
         provider = self.providerChoice.GetSelection()
-        ow_key = self.openWeatherKeyCtrl.GetValue().strip()
-        pw_key = self.pirateWeatherKeyCtrl.GetValue().strip()
+        ow_key = self._getOpenWeatherKey().strip()
+        pw_key = self._getPirateWeatherKey().strip()
         auto_detect = self.autoDetectCb.GetValue()
         
         if provider == 0 or provider == 2:
@@ -1055,8 +1136,8 @@ class WeatherCheckerSettingsPanel(SettingsPanel):
     def onSave(self):
         # Save credentials and providers
         config_manager.setConfigVal("provider", self.providerChoice.GetSelection())
-        config_manager.setConfigVal("openWeatherApiKey", self.openWeatherKeyCtrl.GetValue().strip())
-        config_manager.setConfigVal("pirateWeatherApiKey", self.pirateWeatherKeyCtrl.GetValue().strip())
+        config_manager.setConfigVal("openWeatherApiKey", self._getOpenWeatherKey().strip())
+        config_manager.setConfigVal("pirateWeatherApiKey", self._getPirateWeatherKey().strip())
         config_manager.setConfigVal("autoDetectLocation", self.autoDetectCb.GetValue())
         
         # Save Granular Units
