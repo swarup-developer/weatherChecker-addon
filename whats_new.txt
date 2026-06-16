@@ -1,3 +1,7 @@
+Version 4.4.1:
+- Change: Updated source code repository URL in buildVars.py.
+- Change: Updated the last tested NVDA version to 2026.1.1.
+
 Version 4.4.0:
 - Improved: Added a "Show API key" checkbox in settings to toggle the plain text visibility of OpenWeather and Pirate Weather API keys.
 - Improved: Renamed the credentials verification button to "Test Provider Settings" and configured it to hide automatically after a successful test.

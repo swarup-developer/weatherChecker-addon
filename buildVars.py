@@ -2,14 +2,14 @@ import os
 
 addon_info = {
     "addon_name": "weatherChecker",
-    "addon_version": "4.4.0",
+    "addon_version": "4.4.1",
     "summary": "Weather Checker",
     "description": "Provides weather conditions, forecasts, astronomy data, and weather alerts using OpenWeather and Pirate Weather APIs.",
     "author": "Swarup Baral",
-    "url": "https://example.com/weatherChecker",
+    "url": "https://github.com/swarup-developer/weatherChecker-addon",
     "license": "GPL-2",
     "minimumNVDAVersion": "2024.1",
-    "lastTestedNVDAVersion": "2026.3",
+    "lastTestedNVDAVersion": "2026.1.1",
 }
 
 pythonSources = [
